@@ -7,6 +7,9 @@ export const CACHE_CONFIG = {
   stockQuote: {
     maxAge: 15, // 15 秒
   },
+  stockRealtime: {
+    maxAge: 5, // 5 秒，实时快照刷新更快
+  },
 };
 
 const cacheName = "stockgoose-cache";
@@ -28,7 +31,7 @@ export function createCacheKey(request: Request): Request {
 export async function getFromCache(request: Request): Promise<Response | null> {
   const cache = await caches.open(cacheName);
   const key = createCacheKey(request);
-  return cache.match(key);
+  return (await cache.match(key)) ?? null;
 }
 
 /**

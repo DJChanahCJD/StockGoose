@@ -165,15 +165,40 @@ function StockCard({
   onRemove: () => void;
 }) {
   const isUp = (quote.change ?? 0) >= 0;
-  const trend = quote.trend.length
-    ? quote.trend.map((item) => item.price)
-    : buildFallbackTrend(quote.price ?? 1);
-  const points = buildPolylinePoints(trend);
+  const [fallbackPoints, setFallbackPoints] = useState("");
+  const trend = useMemo(
+    () => (quote.trend.length ? quote.trend.map((item) => item.price) : null),
+    [quote.trend]
+  );
 
-  const upColor = colorMode === "cn" ? "danger" : "success";
-  const downColor = colorMode === "cn" ? "success" : "danger";
-  const colorClass = isUp ? `text-${upColor}` : `text-${downColor}`;
-  const bgLightClass = isUp ? `bg-${upColor}/10` : `bg-${downColor}/10`;
+  useEffect(() => {
+    if (!trend) {
+      setFallbackPoints(
+        buildPolylinePoints(buildFallbackTrend(quote.price ?? 1))
+      );
+    }
+  }, [trend, quote.price]);
+
+  const points = trend ? buildPolylinePoints(trend) : fallbackPoints;
+
+  const colorClass =
+    colorMode === "cn"
+      ? isUp
+        ? "text-danger"
+        : "text-success"
+      : isUp
+        ? "text-success"
+        : "text-danger";
+
+  const bgLightClass =
+    colorMode === "cn"
+      ? isUp
+        ? "bg-danger/10"
+        : "bg-success/10"
+      : isUp
+        ? "bg-success/10"
+        : "bg-danger/10";
+
   const Icon = isUp ? TrendingUp : TrendingDown;
 
   return (
@@ -481,6 +506,7 @@ export default function HomePage() {
     addAlert: addAlertRule,
     removeAlert: removeAlertRule,
     refreshQuotes,
+    refreshSnapshots,
   } = useStockStore();
 
   function pushNotification(message: string): void {
@@ -499,7 +525,7 @@ export default function HomePage() {
 
   useEffect(() => {
     let cancelled = false;
-    async function runRefresh() {
+    async function initialLoad() {
       try {
         await refreshQuotes();
       } catch (error) {
@@ -507,13 +533,16 @@ export default function HomePage() {
           toast.error(error instanceof Error ? error.message : "行情加载失败");
       }
     }
-    runRefresh();
-    const timer = window.setInterval(runRefresh, 15000);
+    async function periodicRefresh() {
+      await refreshSnapshots();
+    }
+    initialLoad();
+    const timer = window.setInterval(periodicRefresh, 15000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [refreshQuotes]);
+  }, [refreshQuotes, refreshSnapshots]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -560,7 +589,10 @@ export default function HomePage() {
   function handleAddAlert(): void {
     if (!alertModalQuote) return;
     const threshold = Number(alertDraft.threshold);
-    if (!Number.isFinite(threshold)) return toast.error("请输入有效阈值");
+    if (!Number.isFinite(threshold)) {
+      toast.error("请输入有效阈值");
+      return;
+    }
     addAlertRule({
       id: crypto.randomUUID(),
       secid: alertModalQuote.secid,

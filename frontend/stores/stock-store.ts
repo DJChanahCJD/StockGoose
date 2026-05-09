@@ -1,7 +1,12 @@
-import type { AlertRule, StockQuote, StockSearchItem } from "@shared/types";
+import type {
+  AlertRule,
+  RealtimeSnapshot,
+  StockQuote,
+  StockSearchItem,
+} from "@shared/types";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
-import { fetchStockQuotes } from "@/lib/stocks/api";
+import { fetchRealtimeSnapshots, fetchStockQuotes } from "@/lib/stocks/api";
 
 export const STOCK_STORE_KEY = "stockgoose_data";
 export const DEFAULT_WATCHLIST = ["105.AAPL", "116.01810", "1.000300"];
@@ -22,6 +27,7 @@ type StockStoreState = {
   addAlert: (rule: AlertRule) => void;
   removeAlert: (id: string) => void;
   refreshQuotes: () => Promise<void>;
+  refreshSnapshots: () => Promise<void>;
 };
 
 /**
@@ -83,6 +89,47 @@ function mergeQuotes(
   for (const quote of incoming) {
     if (watchlist.includes(quote.secid)) {
       next[quote.secid] = quote;
+    }
+  }
+
+  return next;
+}
+
+/**
+ * 将 RealtimeSnapshot 的实时字段合并到已有 StockQuote，保留趋势线不变。
+ */
+function mergeSnapshotIntoQuote(
+  quote: StockQuote,
+  snapshot: RealtimeSnapshot
+): StockQuote {
+  return {
+    ...quote,
+    price: snapshot.price ?? quote.price,
+    previousClose: snapshot.previousClose ?? quote.previousClose,
+    change: snapshot.change ?? quote.change,
+    changePercent: snapshot.changePercent ?? quote.changePercent,
+    volume: snapshot.volume ?? quote.volume,
+    amount: snapshot.amount ?? quote.amount,
+    updatedAt: snapshot.updatedAt ?? quote.updatedAt,
+  };
+}
+
+/**
+ * 用实时快照批量更新行情字典。
+ */
+function mergeSnapshotsIntoQuotes(
+  watchlist: string[],
+  current: Record<string, StockQuote>,
+  snapshots: RealtimeSnapshot[]
+): Record<string, StockQuote> {
+  const next = { ...ensureWatchlistQuotes(watchlist, current) };
+
+  for (const snapshot of snapshots) {
+    if (watchlist.includes(snapshot.secid)) {
+      next[snapshot.secid] = mergeSnapshotIntoQuote(
+        next[snapshot.secid],
+        snapshot
+      );
     }
   }
 
@@ -193,6 +240,29 @@ export const useStockStore = create<StockStoreState>()(
           }));
         } finally {
           set({ loading: false, refreshing: false });
+        }
+      },
+
+      /**
+       * 用 qt.gtimg.cn 实时快照更新价格字段，保留已有趋势线。
+       * 轻量、快速，适合高频轮询。
+       */
+      refreshSnapshots: async () => {
+        const { watchlist } = get();
+        if (!watchlist.length) return;
+
+        try {
+          const snapshots = await fetchRealtimeSnapshots(watchlist);
+          set((state) => ({
+            quotesBySecid: mergeSnapshotsIntoQuotes(
+              state.watchlist,
+              state.quotesBySecid,
+              snapshots
+            ),
+            lastRefreshAt: new Date().toISOString(),
+          }));
+        } catch {
+          // 快照刷新静默失败，不影响已有数据展示
         }
       },
     }),

@@ -19,6 +19,16 @@ export const SITE_RULES: SiteRule[] = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     },
   },
+  {
+    // 腾讯财经实时行情接口规则
+    match: (u) => u.hostname === "qt.gtimg.cn",
+    headers: {
+      Referer: "https://gu.qq.com/",
+      Accept: "*/*",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    },
+  },
 ];
 
 /**

@@ -1,4 +1,9 @@
-import type { ApiResponse, StockQuote, StockSearchItem } from "@shared/types";
+import type {
+  ApiResponse,
+  RealtimeSnapshot,
+  StockQuote,
+  StockSearchItem,
+} from "@shared/types";
 import { mutate } from "@/lib/utils/cache";
 import { shouldUseProxy } from "./platform";
 import { API_URL } from "../api/config";
@@ -200,4 +205,131 @@ export async function fetchStockQuotes(
     async () => readApiResponse<StockQuote[]>(await fetch(url)),
     { revalidate: false }
   ).then((result) => result ?? []);
+}
+
+/** EastMoney 市场码 → qt.gtimg.cn 前缀 */
+const QT_MARKET_MAP: Record<string, string> = {
+  "0": "sz",
+  "1": "sh",
+  "116": "hk",
+};
+
+/** qt.gtimg.cn 前缀 → EastMoney 市场码 */
+const QT_PREFIX_REVERSE: Record<string, string> = {
+  sz: "0",
+  sh: "1",
+  hk: "116",
+};
+
+/** EastMoney secid → qt.gtimg.cn 股票代码 (如 0.000858 → sz000858) */
+function toQtCode(secid: string): string | null {
+  const [market, code] = secid.split(".");
+  const prefix = QT_MARKET_MAP[market];
+  if (!prefix || !code) return null;
+  return `${prefix}${code}`;
+}
+
+/** null 安全的数字解析 */
+function parseNum(val: string | undefined): number | null {
+  if (!val || val === "") return null;
+  const n = Number(val);
+  return Number.isNaN(n) ? null : n;
+}
+
+/**
+ * 解析 qt.gtimg.cn 返回的单行 GBK 数据。
+ * 响应格式: v_sz000858="51~五粮液~000858~27.78~..."
+ */
+function parseRealtimeLine(line: string): RealtimeSnapshot | null {
+  const match = line.match(/^v_(\w+)="(.+)"$/);
+  if (!match) return null;
+
+  const qtCode = match[1];
+  const fields = match[2].split("~");
+  const code = fields[2];
+  const name = fields[1];
+  const qtPrefix = qtCode.match(/^[a-z]+/)?.[0] ?? "";
+  const market = QT_PREFIX_REVERSE[qtPrefix] ?? "";
+  const price = parseNum(fields[3]);
+  const previousClose = parseNum(fields[4]);
+
+  return {
+    secid: `${market}.${code}`,
+    code,
+    name,
+    price,
+    previousClose,
+    open: parseNum(fields[5]),
+    high: parseNum(fields[33]),
+    low: parseNum(fields[34]),
+    change:
+      price !== null && previousClose !== null
+        ? Number((price - previousClose).toFixed(3))
+        : parseNum(fields[31]),
+    changePercent: parseNum(fields[32]),
+    volume: parseNum(fields[6]),
+    amount: parseNum(fields[37]),
+    turnoverRate: parseNum(fields[38]),
+    pe: parseNum(fields[39]),
+    amplitude: parseNum(fields[43]),
+    totalMarketCap: parseNum(fields[45]),
+    highLimit: parseNum(fields[47]),
+    lowLimit: parseNum(fields[48]),
+    bidPrice: parseNum(fields[9]),
+    bidVolume: parseNum(fields[10]),
+    askPrice: parseNum(fields[19]),
+    askVolume: parseNum(fields[20]),
+    updatedAt: fields[30] || null,
+  };
+}
+
+/** Tauri 直连 qt.gtimg.cn 获取实时行情快照 */
+async function fetchRealtimeDirect(
+  secids: string[]
+): Promise<RealtimeSnapshot[]> {
+  const qtCodes = secids.map(toQtCode).filter((c): c is string => c !== null);
+  if (!qtCodes.length) return [];
+
+  const url = `http://qt.gtimg.cn/q=${qtCodes.join(",")}`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`腾讯行情响应异常: ${response.status}`);
+
+  const buffer = await response.arrayBuffer();
+  const text = new TextDecoder("gbk").decode(buffer);
+
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map(parseRealtimeLine)
+    .filter((s): s is RealtimeSnapshot => s !== null);
+}
+
+/**
+ * 获取单个标的实时快照。
+ */
+export async function fetchRealtimeSnapshot(
+  secid: string
+): Promise<RealtimeSnapshot | null> {
+  const results = await fetchRealtimeSnapshots([secid]);
+  return results[0] ?? null;
+}
+
+/**
+ * 批量获取实时行情快照。
+ * 网页端走后端代理（自动处理 GBK），Tauri 直连 qt.gtimg.cn。
+ */
+export async function fetchRealtimeSnapshots(
+  secids: string[]
+): Promise<RealtimeSnapshot[]> {
+  const unique = Array.from(new Set(secids)).filter(Boolean);
+  if (!unique.length) return [];
+
+  if (!shouldUseProxy()) {
+    return fetchRealtimeDirect(unique);
+  }
+
+  const url = new URL("/stocks/realtime", API_URL);
+  url.searchParams.set("items", unique.join(","));
+  return readApiResponse<RealtimeSnapshot[]>(await fetch(url));
 }

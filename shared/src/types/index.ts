@@ -38,6 +38,33 @@ export type StockQuote = StockIdentity & {
   trend: StockTrendPoint[];
 };
 
+/** qt.gtimg.cn 实时行情快照，字段比 StockQuote 更丰富但无趋势线 */
+export type RealtimeSnapshot = {
+  secid: string;
+  code: string;
+  name: string;
+  price: number | null;
+  previousClose: number | null;
+  open: number | null;
+  high: number | null;
+  low: number | null;
+  change: number | null;
+  changePercent: number | null;
+  volume: number | null;
+  amount: number | null;
+  turnoverRate: number | null;
+  pe: number | null;
+  amplitude: number | null;
+  totalMarketCap: number | null;
+  highLimit: number | null;
+  lowLimit: number | null;
+  bidPrice: number | null;
+  bidVolume: number | null;
+  askPrice: number | null;
+  askVolume: number | null;
+  updatedAt: string | null;
+};
+
 export type AlertRule = {
   id: string;
   secid: string;
