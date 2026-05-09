@@ -1,19 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type {
-  AlertRule,
-  StockQuote,
-  StockSearchItem,
-  StockTrendPoint,
-} from "@shared/types";
+import type { AlertRule, StockQuote, StockSearchItem } from "@shared/types";
 import {
-  Activity,
+  AlertCircle,
   Bell,
-  ChevronRight,
-  Loader2,
+  Clock3,
+  GripHorizontal,
+  Palette,
   Plus,
-  RefreshCw,
   Search,
   Trash2,
   TrendingDown,
@@ -21,632 +16,677 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
+import { GooseLogo } from "@/components/logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { cn } from "@/lib/utils";
-import { fetchStockQuotes, searchStocks } from "@/lib/stocks/api";
+import { searchStocks } from "@/lib/stocks/api";
 import { getRuntimePlatform } from "@/lib/stocks/platform";
-import {
-  readAlertRules,
-  readWatchlist,
-  writeAlertRules,
-  writeWatchlist,
-} from "@/lib/stocks/storage";
+import { toSecid, useStockStore } from "@/stores";
 
+// ==========================================
+// Types & Constants & Utils
+// ==========================================
+type AlertDraft = { type: AlertRule["type"]; threshold: string };
 const ALERT_LABELS: Record<AlertRule["type"], string> = {
   PRICE_ABOVE: "价格高于",
   PRICE_BELOW: "价格低于",
   CHANGE_PERCENT_ABOVE: "涨幅高于",
   CHANGE_PERCENT_BELOW: "跌幅低于",
 };
+const ALERT_OPTIONS: Array<{ value: AlertRule["type"]; label: string }> = [
+  { value: "PRICE_ABOVE", label: "价格高于" },
+  { value: "PRICE_BELOW", label: "价格低于" },
+  { value: "CHANGE_PERCENT_ABOVE", label: "日涨幅大于(%)" },
+  { value: "CHANGE_PERCENT_BELOW", label: "日跌幅大于(%)" },
+];
 
-/**
- * 将搜索结果转成内部 secid。
- */
-function toSecid(item: StockSearchItem): string {
-  return `${item.market}.${item.code}`;
+function buildFallbackTrend(price: number): number[] {
+  let c = price;
+  return Array.from({ length: 20 }, () => {
+    c = Math.max(0.01, c + c * 0.01 * (Math.random() - 0.5));
+    return Number(c.toFixed(2));
+  });
 }
-
-/**
- * 格式化数字，空值显示占位。
- */
 function formatNumber(value: number | null, digits = 2): string {
   return value === null || Number.isNaN(value) ? "--" : value.toFixed(digits);
 }
-
-/**
- * 格式化成交量。
- */
-function formatVolume(value: number | null): string {
-  if (value === null) return "--";
-  if (value >= 100000000) return `${(value / 100000000).toFixed(2)}亿`;
-  if (value >= 10000) return `${(value / 10000).toFixed(2)}万`;
-  return String(value);
-}
-
-/**
- * 生成 SVG 折线路径。
- */
-function buildLinePath(
-  points: StockTrendPoint[],
-  width: number,
-  height: number
-): string {
-  if (points.length < 2) return "";
-
-  const values = points.map((point) => point.price);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  return points
-    .map((point, index) => {
-      const x = (index / (points.length - 1)) * width;
-      const y = height - ((point.price - min) / range) * height;
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
+function buildPolylinePoints(data: number[]): string {
+  if (data.length < 2) return "";
+  const min = Math.min(...data),
+    max = Math.max(...data),
+    range = max - min || 1;
+  return data
+    .map(
+      (v, i) =>
+        `${(i / (data.length - 1)) * 100},${100 - ((v - min) / range) * 100}`
+    )
     .join(" ");
 }
-
-/**
- * 判断提醒规则是否触发。
- */
 function isAlertTriggered(rule: AlertRule, quote: StockQuote): boolean {
   if (rule.type === "PRICE_ABOVE")
     return quote.price !== null && quote.price >= rule.threshold;
   if (rule.type === "PRICE_BELOW")
     return quote.price !== null && quote.price <= rule.threshold;
-  if (rule.type === "CHANGE_PERCENT_ABOVE") {
+  if (rule.type === "CHANGE_PERCENT_ABOVE")
     return (
       quote.changePercent !== null && quote.changePercent >= rule.threshold
     );
-  }
-
   return (
     quote.changePercent !== null &&
     quote.changePercent <= -Math.abs(rule.threshold)
   );
 }
+function getDisplayName(quote: StockQuote): string {
+  return quote.name || quote.code;
+}
+function formatUpdateTime(value: string | null): string {
+  if (!value) return "等待数据";
+  const p = new Date(value);
+  return Number.isNaN(p.getTime())
+    ? value
+    : p.toLocaleTimeString("zh-CN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+}
 
-/**
- * StockGoose 应用首页。
- */
+// ==========================================
+// Components
+// ==========================================
+
+function Header({
+  filterTerm,
+  onFilterChange,
+  colorMode,
+  onColorModeChange,
+}: {
+  filterTerm: string;
+  onFilterChange: (val: string) => void;
+  colorMode: "us" | "cn";
+  onColorModeChange: (m: "us" | "cn") => void;
+}) {
+  return (
+    <header
+      className="h-14 bg-card border-b border-border select-none shrink-0 z-10"
+      data-tauri-drag-region
+    >
+      <div className="max-w-7xl mx-auto w-full h-full px-4 flex items-center justify-between pointer-events-none">
+        <div className="flex items-center gap-3 text-foreground">
+          <GooseLogo className="w-5 h-5" />
+          <span className="font-bold tracking-tight text-sm">StockGoose</span>
+        </div>
+
+        <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="relative group w-64">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
+            <input
+              value={filterTerm}
+              onChange={(e) => onFilterChange(e.target.value)}
+              placeholder="搜索自选代码或名称..."
+              className="w-full bg-background border border-input rounded-full py-1.5 pl-9 pr-8 text-xs focus:outline-none focus:ring-1 focus:ring-ring transition-all placeholder:text-muted-foreground text-foreground"
+            />
+            {filterTerm && (
+              <button
+                onClick={() => onFilterChange("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => onColorModeChange(colorMode === "us" ? "cn" : "us")}
+            className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+            title={
+              colorMode === "us"
+                ? "切换为红涨绿跌 (国内市场)"
+                : "切换为绿涨红跌 (国外市场)"
+            }
+          >
+            <Palette className="w-4 h-4" />
+          </button>
+          <ThemeToggle />
+        </div>
+      </div>
+    </header>
+  );
+}
+
+function StockCard({
+  quote,
+  colorMode,
+  onAlert,
+  onRemove,
+}: {
+  quote: StockQuote;
+  colorMode: "us" | "cn";
+  onAlert: () => void;
+  onRemove: () => void;
+}) {
+  const isUp = (quote.change ?? 0) >= 0;
+  const trend = quote.trend.length
+    ? quote.trend.map((item) => item.price)
+    : buildFallbackTrend(quote.price ?? 1);
+  const points = buildPolylinePoints(trend);
+
+  const upColor = colorMode === "cn" ? "danger" : "success";
+  const downColor = colorMode === "cn" ? "success" : "danger";
+  const colorClass = isUp ? `text-${upColor}` : `text-${downColor}`;
+  const bgLightClass = isUp ? `bg-${upColor}/10` : `bg-${downColor}/10`;
+  const Icon = isUp ? TrendingUp : TrendingDown;
+
+  return (
+    <div className="group relative bg-card text-card-foreground rounded-2xl p-5 shadow-sm border border-border hover:shadow-md hover:border-ring/40 transition-all duration-300 cursor-default">
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <h2
+            className="text-base font-bold tracking-tight truncate max-w-[140px]"
+            title={quote.name}
+          >
+            {quote.name}
+          </h2>
+          <div className="flex items-center mt-1.5">
+            <span className="text-[11px] font-mono font-medium bg-secondary text-secondary-foreground px-2 py-0.5 rounded-md border border-border/50">
+              {quote.code}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onAlert}
+            className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-all"
+            title="设置提醒"
+          >
+            <Bell className="w-4 h-4" />
+          </button>
+          <div
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-2 py-1",
+              bgLightClass
+            )}
+          >
+            <Icon className={cn("w-3.5 h-3.5", colorClass)} />
+            <span className={cn("text-xs font-bold", colorClass)}>
+              {quote.changePercent === null
+                ? "--"
+                : `${quote.changePercent >= 0 ? "+" : ""}${quote.changePercent}%`}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-end justify-between mt-6">
+        <div>
+          <div className="font-mono text-3xl font-semibold tracking-tight">
+            {formatNumber(quote.price, 2)}
+          </div>
+          <div className={cn("mt-1 font-mono text-xs font-medium", colorClass)}>
+            {quote.change === null
+              ? "--"
+              : `${quote.change >= 0 ? "+" : ""}${quote.change.toFixed(2)}`}
+          </div>
+        </div>
+
+        <div className="pb-1">
+          <svg
+            viewBox="0 -10 100 120"
+            className="h-8 w-20 overflow-visible opacity-80"
+            preserveAspectRatio="none"
+          >
+            <polyline
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              points={points}
+              className={colorClass}
+            />
+          </svg>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+        <Clock3 className="w-3.5 h-3.5" />
+        <span>行情时间 {formatUpdateTime(quote.updatedAt)}</span>
+      </div>
+
+      <div className="absolute top-4 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab">
+        <GripHorizontal className="w-4 h-4 text-muted-foreground/40" />
+      </div>
+
+      <button
+        onClick={onRemove}
+        className="absolute right-3 top-3 rounded-md p-1.5 text-muted-foreground opacity-0 transition hover:bg-destructive/10 hover:text-destructive group-hover:opacity-100"
+        title="移除自选"
+      >
+        <X className="w-4 h-4" />
+      </button>
+    </div>
+  );
+}
+
+function AddStockModal({
+  isOpen,
+  onClose,
+  searchTerm,
+  onSearchChange,
+  isSearching,
+  searchResults,
+  watchlist,
+  onAdd,
+}: any) {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-background/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card text-card-foreground rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[80vh] border border-border">
+        <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
+          <h3 className="font-bold">搜索并添加股票</h3>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-4 border-b border-border">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              autoFocus
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="搜索代码或名称 (如: AAPL)..."
+              className="w-full bg-background border border-input rounded-xl py-2 pl-10 pr-4 text-sm focus:ring-1 focus:ring-ring transition-all outline-none text-foreground placeholder:text-muted-foreground"
+            />
+          </div>
+        </div>
+        <div className="overflow-y-auto p-2 min-h-[100px]">
+          {isSearching ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              搜索中...
+            </div>
+          ) : searchResults.length === 0 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              输入关键词开始搜索
+            </div>
+          ) : (
+            searchResults.map((item: any) => {
+              const secid = toSecid(item);
+              const added = watchlist.includes(secid);
+              return (
+                <div
+                  key={secid}
+                  className="flex items-center justify-between p-3 hover:bg-accent rounded-xl transition-colors"
+                >
+                  <div>
+                    <div className="font-bold text-foreground">{item.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {item.market}.{item.code}
+                    </div>
+                  </div>
+                  <button
+                    disabled={added}
+                    onClick={() => onAdd(item)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg text-xs font-medium transition-colors",
+                      added
+                        ? "bg-secondary text-muted-foreground cursor-not-allowed"
+                        : "bg-primary text-primary-foreground hover:opacity-90"
+                    )}
+                  >
+                    {added ? "已在自选" : "加入自选"}
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AlertModal({
+  quote,
+  onClose,
+  draft,
+  onDraftChange,
+  onAddAlert,
+  alerts,
+  onRemoveAlert,
+}: any) {
+  if (!quote) return null;
+  return (
+    <div className="fixed inset-0 bg-background/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-card text-card-foreground rounded-2xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col border border-border">
+        <div className="p-4 border-b border-border flex justify-between items-center bg-muted/30">
+          <div>
+            <h3 className="font-bold">设置提醒</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {quote.code} - 当前: {formatNumber(quote.price, 2)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="p-5 flex flex-col gap-4">
+          <div className="flex gap-2">
+            <select
+              value={draft.type}
+              onChange={(e) =>
+                onDraftChange({ ...draft, type: e.target.value })
+              }
+              className="flex-1 bg-background border border-input rounded-lg px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-ring text-foreground"
+            >
+              {ALERT_OPTIONS.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              placeholder="数值"
+              value={draft.threshold}
+              onChange={(e) =>
+                onDraftChange({ ...draft, threshold: e.target.value })
+              }
+              className="w-24 bg-background border border-input rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring text-foreground"
+            />
+          </div>
+          <button
+            onClick={onAddAlert}
+            className="w-full bg-primary text-primary-foreground rounded-lg py-2 text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-1"
+          >
+            <Plus className="w-4 h-4" /> 添加规则
+          </button>
+
+          <div className="mt-4">
+            <h4 className="text-xs font-bold text-muted-foreground mb-2 uppercase tracking-wider">
+              已有规则
+            </h4>
+            <div className="flex flex-col gap-2 max-h-40 overflow-y-auto">
+              {alerts
+                .filter((a: AlertRule) => a.secid === quote.secid)
+                .map((rule: AlertRule) => (
+                  <div
+                    key={rule.id}
+                    className="flex items-center justify-between bg-secondary/50 px-3 py-2 rounded-lg border border-border"
+                  >
+                    <span className="text-xs font-medium text-secondary-foreground">
+                      {ALERT_LABELS[rule.type]} {rule.threshold}
+                      {rule.type.includes("CHANGE") ? "%" : ""}
+                    </span>
+                    <button
+                      onClick={() => onRemoveAlert(rule.id)}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              {alerts.filter((a: AlertRule) => a.secid === quote.secid)
+                .length === 0 && (
+                <div className="text-xs text-muted-foreground text-center py-4 bg-secondary/50 rounded-lg border border-border border-dashed">
+                  暂无提醒规则
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ==========================================
+// Main Page Component
+// ==========================================
 export default function HomePage() {
-  const [watchlist, setWatchlist] = useState<string[]>([]);
-  const [quotes, setQuotes] = useState<StockQuote[]>([]);
-  const [selectedSecid, setSelectedSecid] = useState<string>("");
-  const [alerts, setAlerts] = useState<AlertRule[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [watchlistFilterTerm, setWatchlistFilterTerm] = useState("");
   const [searchResults, setSearchResults] = useState<StockSearchItem[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [alertDraft, setAlertDraft] = useState<{
-    type: AlertRule["type"];
-    threshold: string;
-  }>({
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [alertModalQuote, setAlertModalQuote] = useState<StockQuote | null>(
+    null
+  );
+  const [alertDraft, setAlertDraft] = useState<AlertDraft>({
     type: "PRICE_ABOVE",
     threshold: "",
   });
+  const [notifications, setNotifications] = useState<
+    { id: number; message: string }[]
+  >([]);
+  const [runtimeLabel, setRuntimeLabel] = useState<string>("运行中");
 
-  const selectedQuote = useMemo(
-    () =>
-      quotes.find((quote) => quote.secid === selectedSecid) ??
-      quotes[0] ??
-      null,
-    [quotes, selectedSecid]
-  );
-  const runtime = getRuntimePlatform();
+  const {
+    watchlist,
+    quotesBySecid,
+    alerts,
+    loading,
+    lastRefreshAt,
+    colorMode,
+    setColorMode,
+    addToWatchlist: addStockToWatchlist,
+    removeFromWatchlist: removeStockFromWatchlist,
+    addAlert: addAlertRule,
+    removeAlert: removeAlertRule,
+    refreshQuotes,
+  } = useStockStore();
+
+  function pushNotification(message: string): void {
+    const id = Date.now() + Math.floor(Math.random() * 1000);
+    setNotifications((current) => [...current, { id, message }]);
+    window.setTimeout(
+      () =>
+        setNotifications((current) => current.filter((item) => item.id !== id)),
+      5000
+    );
+  }
 
   useEffect(() => {
-    const storedWatchlist = readWatchlist();
-    setWatchlist(storedWatchlist);
-    setSelectedSecid(storedWatchlist[0] ?? "");
-    setAlerts(readAlertRules());
+    setRuntimeLabel(getRuntimePlatform() === "web" ? "网页代理" : "运行时直连");
   }, []);
 
   useEffect(() => {
-    if (!watchlist.length) return;
-    writeWatchlist(watchlist);
-  }, [watchlist]);
-
-  useEffect(() => {
-    writeAlertRules(alerts);
-  }, [alerts]);
-
-  useEffect(() => {
-    if (!watchlist.length) return;
-
     let cancelled = false;
-
-    /**
-     * 拉取并刷新自选行情。
-     */
-    async function refreshQuotes() {
+    async function runRefresh() {
       try {
-        setIsLoading(true);
-        setError(null);
-        const data = await fetchStockQuotes(watchlist);
-        if (cancelled) return;
-
-        setQuotes(data);
-        setSelectedSecid((current) => current || data[0]?.secid || "");
-      } catch (err) {
+        await refreshQuotes();
+      } catch (error) {
         if (!cancelled)
-          setError(err instanceof Error ? err.message : "行情加载失败");
-      } finally {
-        if (!cancelled) setIsLoading(false);
+          toast.error(error instanceof Error ? error.message : "行情加载失败");
       }
     }
-
-    refreshQuotes();
-    const timer = window.setInterval(refreshQuotes, 45000);
-
+    runRefresh();
+    const timer = window.setInterval(runRefresh, 15000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [watchlist]);
+  }, [refreshQuotes]);
 
   useEffect(() => {
-    if (!searchQuery.trim()) {
+    if (!searchTerm.trim()) {
       setSearchResults([]);
       return;
     }
-
     const timer = window.setTimeout(async () => {
       try {
         setIsSearching(true);
-        setSearchResults(await searchStocks(searchQuery));
-      } catch (err) {
-        toast.error(err instanceof Error ? err.message : "搜索失败");
+        setSearchResults(await searchStocks(searchTerm));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "搜索失败");
       } finally {
         setIsSearching(false);
       }
-    }, 350);
-
+    }, 300);
     return () => window.clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchTerm]);
 
   useEffect(() => {
+    const quotes = watchlist
+      .map((secid) => quotesBySecid[secid])
+      .filter((q): q is StockQuote => Boolean(q));
     if (!quotes.length || !alerts.length) return;
-
     for (const quote of quotes) {
       for (const rule of alerts.filter((item) => item.secid === quote.secid)) {
-        if (isAlertTriggered(rule, quote)) {
-          toast.info(
-            `${quote.name} ${ALERT_LABELS[rule.type]} ${rule.threshold}`
+        if (isAlertTriggered(rule, quote))
+          pushNotification(
+            `${getDisplayName(quote)} ${ALERT_LABELS[rule.type]} ${rule.threshold}`
           );
-        }
       }
     }
-  }, [quotes, alerts]);
+  }, [watchlist, quotesBySecid, alerts]);
 
-  /**
-   * 添加搜索结果到自选。
-   */
   function addToWatchlist(item: StockSearchItem): void {
     const secid = toSecid(item);
-    setWatchlist((current) =>
-      current.includes(secid) ? current : [...current, secid]
-    );
-    setSelectedSecid(secid);
-    setSearchQuery("");
+    if (watchlist.includes(secid)) return;
+    addStockToWatchlist(item);
+    setIsAddModalOpen(false);
+    setSearchTerm("");
     setSearchResults([]);
   }
 
-  /**
-   * 从自选列表移除标的。
-   */
-  function removeFromWatchlist(secid: string): void {
-    setWatchlist((current) => current.filter((item) => item !== secid));
-    setAlerts((current) => current.filter((item) => item.secid !== secid));
-    setQuotes((current) => current.filter((item) => item.secid !== secid));
-    setSelectedSecid((current) => (current === secid ? "" : current));
-  }
-
-  /**
-   * 添加当前标的提醒规则。
-   */
-  function addAlert(): void {
-    if (!selectedQuote) return;
+  function handleAddAlert(): void {
+    if (!alertModalQuote) return;
     const threshold = Number(alertDraft.threshold);
-    if (!Number.isFinite(threshold)) {
-      toast.error("请输入有效阈值");
-      return;
-    }
-
-    setAlerts((current) => [
-      ...current,
-      {
-        id: crypto.randomUUID(),
-        secid: selectedQuote.secid,
-        type: alertDraft.type,
-        threshold,
-      },
-    ]);
+    if (!Number.isFinite(threshold)) return toast.error("请输入有效阈值");
+    addAlertRule({
+      id: crypto.randomUUID(),
+      secid: alertModalQuote.secid,
+      type: alertDraft.type,
+      threshold,
+    });
     setAlertDraft((current) => ({ ...current, threshold: "" }));
   }
 
+  const visibleStocks = useMemo(() => {
+    const query = watchlistFilterTerm.toLowerCase();
+    return watchlist
+      .map((secid) => quotesBySecid[secid])
+      .filter((q): q is StockQuote => Boolean(q))
+      .filter(
+        (q) =>
+          q.name.toLowerCase().includes(query) ||
+          q.code.toLowerCase().includes(query)
+      );
+  }, [watchlist, quotesBySecid, watchlistFilterTerm]);
+
   return (
-    <main className="min-h-screen bg-[#e9e4d8] text-[#171713]">
-      <div className="mx-auto flex min-h-screen w-full max-w-7xl flex-col gap-4 p-3 sm:p-5">
-        <header className="grid gap-3 border-b border-[#171713]/15 pb-4 lg:grid-cols-[1fr_420px] lg:items-end">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="grid size-10 place-items-center rounded-md bg-[#171713] text-[#f8f4ea]">
-                <Activity className="size-5" />
-              </div>
-              <div>
-                <h1 className="font-serif text-3xl font-black tracking-normal sm:text-5xl">
-                  StockGoose
-                </h1>
-                <p className="text-sm text-[#5f5a4f]">
-                  多端实时自选监控 ·{" "}
-                  {runtime === "web" ? "网页代理" : "运行时直连"}
-                </p>
-              </div>
-            </div>
-          </div>
+    <div className="flex flex-col h-screen bg-background text-foreground font-sans selection:bg-accent overflow-hidden">
+      <Header
+        filterTerm={watchlistFilterTerm}
+        onFilterChange={setWatchlistFilterTerm}
+        colorMode={colorMode}
+        onColorModeChange={setColorMode}
+      />
 
-          <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#6f6a5e]" />
-            <Input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="搜索股票、基金或指数"
-              className="h-11 rounded-md border-[#171713]/20 bg-[#f8f4ea] pl-10 text-base shadow-none focus-visible:ring-[#171713]/20"
-            />
-            {searchQuery && (
+      <main className="flex-1 overflow-y-auto p-6 bg-muted/20 custom-scrollbar">
+        {/* 全局最大宽度 5xl 对齐 (限制最多3列) */}
+        <div className="max-w-7xl mx-auto w-full">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h1 className="text-xl font-bold tracking-tight">自选监控</h1>
+              <p className="text-xs text-muted-foreground mt-1">
+                {runtimeLabel} · {watchlist.length} 个标的 · 最近刷新{" "}
+                {formatUpdateTime(lastRefreshAt)}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-[11px] font-medium text-success bg-success/10 px-2.5 py-1 rounded-full border border-success/20">
+                ● 实时更新中
+              </span>
               <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-1 text-[#6f6a5e] hover:bg-[#171713]/10"
-                aria-label="清空搜索"
+                onClick={() => setIsAddModalOpen(true)}
+                className="flex items-center gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 px-3 py-1.5 rounded-full transition-all shadow-sm"
               >
-                <X className="size-4" />
+                <Plus className="w-3.5 h-3.5" /> 添加自选
               </button>
-            )}
-            {(searchResults.length > 0 || isSearching) && (
-              <div className="absolute right-0 top-12 z-20 max-h-80 w-full overflow-auto rounded-md border border-[#171713]/15 bg-[#f8f4ea] shadow-xl">
-                {isSearching && (
-                  <div className="px-4 py-3 text-sm text-[#6f6a5e]">
-                    搜索中...
-                  </div>
-                )}
-                {searchResults.map((item) => {
-                  const secid = toSecid(item);
-                  const added = watchlist.includes(secid);
-                  return (
-                    <button
-                      key={`${item.market}.${item.code}`}
-                      type="button"
-                      onClick={() => addToWatchlist(item)}
-                      disabled={added}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[#171713]/5 disabled:cursor-not-allowed disabled:opacity-45"
-                    >
-                      <span>
-                        <span className="block text-sm font-bold">
-                          {item.name}
-                        </span>
-                        <span className="text-xs text-[#6f6a5e]">
-                          {item.market}.{item.code} ·{" "}
-                          {item.securityTypeName || "标的"}
-                        </span>
-                      </span>
-                      <Plus className="size-4" />
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </header>
-
-        {error && (
-          <div className="flex items-center justify-between rounded-md border border-[#a43b2d]/30 bg-[#fff0ed] px-4 py-3 text-sm text-[#8f2e24]">
-            <span>{error}</span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setWatchlist([...watchlist])}
-            >
-              <RefreshCw className="size-4" />
-              重试
-            </Button>
-          </div>
-        )}
-
-        <section className="grid flex-1 gap-4 lg:grid-cols-[360px_1fr]">
-          <aside className="rounded-md border border-[#171713]/15 bg-[#f8f4ea]">
-            <div className="flex items-center justify-between border-b border-[#171713]/10 p-4">
-              <div>
-                <h2 className="text-sm font-black uppercase tracking-[0.18em] text-[#514d44]">
-                  Watchlist
-                </h2>
-                <p className="text-xs text-[#777064]">
-                  {watchlist.length} 个标的
-                </p>
-              </div>
-              {isLoading && (
-                <Loader2 className="size-4 animate-spin text-[#777064]" />
-              )}
             </div>
+          </div>
 
-            <div className="grid gap-2 p-2">
-              {quotes.map((quote) => (
-                <StockRow
-                  key={quote.secid}
-                  quote={quote}
-                  active={quote.secid === selectedQuote?.secid}
-                  onSelect={() => setSelectedSecid(quote.secid)}
-                  onRemove={() => removeFromWatchlist(quote.secid)}
+          {loading && !visibleStocks.length ? (
+            <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+              <div className="w-6 h-6 border-2 border-muted border-t-foreground rounded-full animate-spin mb-3"></div>
+              <p className="text-sm">加载行情中...</p>
+            </div>
+          ) : visibleStocks.length > 0 ? (
+            // 此处修改为最多 3 列 lg:grid-cols-3
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visibleStocks.map((stock) => (
+                <StockCard
+                  key={stock.secid}
+                  quote={stock}
+                  colorMode={colorMode}
+                  onAlert={() => setAlertModalQuote(stock)}
+                  onRemove={() => {
+                    removeStockFromWatchlist(stock.secid);
+                    if (alertModalQuote?.secid === stock.secid)
+                      setAlertModalQuote(null);
+                  }}
                 />
               ))}
             </div>
-          </aside>
-
-          <section className="grid gap-4 xl:grid-cols-[1fr_300px]">
-            <div className="rounded-md border border-[#171713]/15 bg-[#f8f4ea] p-4 sm:p-6">
-              {selectedQuote ? (
-                <StockDetail quote={selectedQuote} />
-              ) : (
-                <div className="grid min-h-96 place-items-center text-center text-[#6f6a5e]">
-                  <div>
-                    <Activity className="mx-auto mb-3 size-10" />
-                    <p>添加一个标的开始监控</p>
-                  </div>
-                </div>
+          ) : (
+            <div className="text-center py-20 text-muted-foreground">
+              <GooseLogo className="w-12 h-12 mx-auto mb-4 opacity-20" />
+              <p className="text-sm">未找到相关自选股</p>
+              {watchlistFilterTerm && (
+                <button
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="mt-4 text-xs font-medium bg-secondary text-secondary-foreground px-4 py-2 rounded-full hover:bg-secondary/80 transition-colors"
+                >
+                  去全局搜索添加
+                </button>
               )}
             </div>
-
-            <div className="rounded-md border border-[#171713]/15 bg-[#171713] p-4 text-[#f8f4ea]">
-              <div className="mb-4 flex items-center gap-2">
-                <Bell className="size-4 text-[#d8b35f]" />
-                <h2 className="font-serif text-2xl font-black">提醒</h2>
-              </div>
-
-              <div className="grid gap-2">
-                <select
-                  value={alertDraft.type}
-                  onChange={(event) =>
-                    setAlertDraft((current) => ({
-                      ...current,
-                      type: event.target.value as AlertRule["type"],
-                    }))
-                  }
-                  className="h-10 rounded-md border border-white/10 bg-white/10 px-3 text-sm outline-none"
-                >
-                  {Object.entries(ALERT_LABELS).map(([value, label]) => (
-                    <option key={value} value={value} className="bg-[#171713]">
-                      {label}
-                    </option>
-                  ))}
-                </select>
-                <Input
-                  value={alertDraft.threshold}
-                  onChange={(event) =>
-                    setAlertDraft((current) => ({
-                      ...current,
-                      threshold: event.target.value,
-                    }))
-                  }
-                  placeholder="阈值"
-                  type="number"
-                  className="h-10 border-white/10 bg-white/10 text-[#f8f4ea] placeholder:text-white/40"
-                />
-                <Button
-                  onClick={addAlert}
-                  disabled={!selectedQuote}
-                  className="bg-[#d8b35f] text-[#171713] hover:bg-[#e4c372]"
-                >
-                  <Plus className="size-4" />
-                  添加提醒
-                </Button>
-              </div>
-
-              <div className="mt-5 grid gap-2">
-                {alerts
-                  .filter((rule) => rule.secid === selectedQuote?.secid)
-                  .map((rule) => (
-                    <div
-                      key={rule.id}
-                      className="flex items-center justify-between rounded-md bg-white/8 px-3 py-2 text-sm"
-                    >
-                      <span>
-                        {ALERT_LABELS[rule.type]} {rule.threshold}
-                        {rule.type.includes("CHANGE") ? "%" : ""}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setAlerts((current) =>
-                            current.filter((item) => item.id !== rule.id)
-                          )
-                        }
-                        className="rounded p-1 text-white/50 hover:bg-white/10 hover:text-white"
-                        aria-label="删除提醒"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </div>
-                  ))}
-                {selectedQuote &&
-                  alerts.filter((rule) => rule.secid === selectedQuote.secid)
-                    .length === 0 && (
-                    <p className="rounded-md border border-dashed border-white/15 px-3 py-6 text-center text-sm text-white/45">
-                      当前标的暂无提醒
-                    </p>
-                  )}
-              </div>
-            </div>
-          </section>
-        </section>
-      </div>
-    </main>
-  );
-}
-
-/**
- * 自选列表行。
- */
-function StockRow({
-  quote,
-  active,
-  onSelect,
-  onRemove,
-}: {
-  quote: StockQuote;
-  active: boolean;
-  onSelect: () => void;
-  onRemove: () => void;
-}) {
-  const positive = (quote.change ?? 0) >= 0;
-
-  return (
-    <div
-      className={cn(
-        "group grid grid-cols-[1fr_auto] items-center gap-3 rounded-md border p-3 transition",
-        active
-          ? "border-[#171713] bg-[#efe7d4]"
-          : "border-transparent hover:bg-[#171713]/5"
-      )}
-    >
-      <button type="button" onClick={onSelect} className="min-w-0 text-left">
-        <div className="flex items-center gap-2">
-          <span className="truncate font-bold">{quote.name}</span>
-          <Badge
-            variant="outline"
-            className="border-[#171713]/15 text-[#6f6a5e]"
-          >
-            {quote.market}.{quote.code}
-          </Badge>
+          )}
         </div>
-        <div className="mt-2 flex items-end justify-between gap-3">
-          <span className="font-mono text-xl font-black">
-            {formatNumber(quote.price, 3)}
-          </span>
-          <span
-            className={cn(
-              "font-mono text-sm font-bold",
-              positive ? "text-[#0f7a4f]" : "text-[#b83b31]"
-            )}
-          >
-            {positive ? "+" : ""}
-            {formatNumber(quote.changePercent)}%
-          </span>
-        </div>
-      </button>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={onRemove}
-          className="rounded p-1 text-[#777064] opacity-0 hover:bg-[#171713]/10 group-hover:opacity-100"
-          aria-label="移除自选"
-        >
-          <Trash2 className="size-4" />
-        </button>
-        <ChevronRight className="size-4 text-[#777064]" />
-      </div>
-    </div>
-  );
-}
+      </main>
 
-/**
- * 选中标的详情。
- */
-function StockDetail({ quote }: { quote: StockQuote }) {
-  const positive = (quote.change ?? 0) >= 0;
-  const linePath = buildLinePath(quote.trend, 760, 260);
-  const Icon = positive ? TrendingUp : TrendingDown;
-
-  return (
-    <div className="grid gap-6">
-      <div className="flex flex-col gap-4 border-b border-[#171713]/10 pb-5 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-serif text-4xl font-black tracking-normal">
-              {quote.name}
-            </h2>
-            <Badge className="bg-[#171713] text-[#f8f4ea]">
-              {quote.market}.{quote.code}
-            </Badge>
-          </div>
-          <p className="mt-1 text-sm text-[#6f6a5e]">
-            更新于 {quote.updatedAt ?? "--"}
-          </p>
-        </div>
-
-        <div className="text-left sm:text-right">
-          <div className="font-mono text-5xl font-black">
-            {formatNumber(quote.price, 3)}
-          </div>
+      {/* 提醒 Toast */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-2 z-50 pointer-events-none">
+        {notifications.map((n) => (
           <div
-            className={cn(
-              "mt-1 flex items-center gap-2 font-mono font-bold sm:justify-end",
-              positive ? "text-[#0f7a4f]" : "text-[#b83b31]"
-            )}
+            key={n.id}
+            className="bg-foreground text-background px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-in slide-in-from-right-4 fade-in"
           >
-            <Icon className="size-4" />
-            {positive ? "+" : ""}
-            {formatNumber(quote.change, 3)} / {positive ? "+" : ""}
-            {formatNumber(quote.changePercent)}%
+            <AlertCircle className="w-5 h-5 text-destructive" />
+            <span className="text-sm font-medium">{n.message}</span>
           </div>
-        </div>
+        ))}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Metric label="昨收" value={formatNumber(quote.previousClose, 3)} />
-        <Metric label="成交量" value={formatVolume(quote.volume)} />
-        <Metric label="分时点" value={String(quote.trend.length)} />
-        <Metric label="来源" value="Eastmoney" />
-      </div>
-
-      <div className="relative overflow-hidden rounded-md border border-[#171713]/10 bg-[#efe7d4] p-3">
-        <svg viewBox="0 0 760 260" className="h-72 w-full overflow-visible">
-          <defs>
-            <linearGradient id="stock-line" x1="0" x2="1" y1="0" y2="0">
-              <stop
-                offset="0%"
-                stopColor={positive ? "#0f7a4f" : "#b83b31"}
-                stopOpacity="0.55"
-              />
-              <stop
-                offset="100%"
-                stopColor={positive ? "#0f7a4f" : "#b83b31"}
-              />
-            </linearGradient>
-          </defs>
-          <path
-            d={linePath}
-            fill="none"
-            stroke="url(#stock-line)"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="4"
-          />
-        </svg>
-        {quote.trend.length < 2 && (
-          <div className="absolute inset-0 grid place-items-center text-sm text-[#6f6a5e]">
-            暂无分时数据
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/**
- * 详情指标块。
- */
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-md border border-[#171713]/10 bg-[#fffaf0] p-3">
-      <div className="text-xs font-bold uppercase tracking-[0.16em] text-[#777064]">
-        {label}
-      </div>
-      <div className="mt-2 font-mono text-lg font-black">{value}</div>
+      <AddStockModal
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        searchTerm={searchTerm}
+        onSearchChange={setSearchTerm}
+        isSearching={isSearching}
+        searchResults={searchResults}
+        watchlist={watchlist}
+        onAdd={addToWatchlist}
+      />
+      <AlertModal
+        quote={alertModalQuote}
+        onClose={() => setAlertModalQuote(null)}
+        draft={alertDraft}
+        onDraftChange={setAlertDraft}
+        onAddAlert={handleAddAlert}
+        alerts={alerts}
+        onRemoveAlert={removeAlertRule}
+      />
     </div>
   );
 }

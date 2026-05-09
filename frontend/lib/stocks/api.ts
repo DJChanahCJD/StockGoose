@@ -1,4 +1,5 @@
 import type { ApiResponse, StockQuote, StockSearchItem } from "@shared/types";
+import { mutate } from "@/lib/utils/cache";
 import { shouldUseProxy } from "./platform";
 import { API_URL } from "../api/config";
 
@@ -181,15 +182,22 @@ export async function fetchStockQuote(
 export async function fetchStockQuotes(
   secids: string[]
 ): Promise<StockQuote[]> {
-  console.log(API_URL);
   const uniqueSecids = Array.from(new Set(secids)).filter(Boolean);
   if (!uniqueSecids.length) return [];
 
   if (!shouldUseProxy()) {
-    return Promise.all(uniqueSecids.map((secid) => fetchQuoteDirect(secid)));
+    return mutate(
+      `stocks:direct:${uniqueSecids.join(",")}`,
+      () => Promise.all(uniqueSecids.map((secid) => fetchQuoteDirect(secid))),
+      { revalidate: false }
+    ).then((result) => result ?? []);
   }
 
   const url = new URL("/stocks/quotes", API_URL);
   url.searchParams.set("items", uniqueSecids.join(","));
-  return readApiResponse<StockQuote[]>(await fetch(url));
+  return mutate(
+    `stocks:proxy:${uniqueSecids.join(",")}`,
+    async () => readApiResponse<StockQuote[]>(await fetch(url)),
+    { revalidate: false }
+  ).then((result) => result ?? []);
 }

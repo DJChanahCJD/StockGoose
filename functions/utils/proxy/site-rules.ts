@@ -9,30 +9,14 @@ const DEFAULT_UA = "Mozilla/5.0 (compatible; stockgoose Proxy/1.0)";
 
 export const SITE_RULES: SiteRule[] = [
   {
-    // Bing 图片防盗链处理
-    match: (u) => u.hostname.includes("bing.com"),
+    // 东方财富行情接口规则
+    match: (u) => u.hostname.includes("eastmoney.com"),
     headers: {
-      Referer: "https://www.bing.com/",
+      Referer: "https://quote.eastmoney.com/",
+      Origin: "https://quote.eastmoney.com",
+      Accept: "application/json, text/plain, */*",
       "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    },
-  },
-  {
-    // Pixiv 相关防盗链处理
-    match: (u) =>
-      ["pximg.net", "pixiv.net", "pixiv.re"].some((h) =>
-        u.hostname.includes(h)
-      ),
-    headers: {
-      Referer: "https://www.pixiv.net/",
-    },
-  },
-  {
-    // Wallhaven 图片代理规则
-    match: (u) => u.hostname.includes("wallhaven.cc"),
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     },
   },
 ];

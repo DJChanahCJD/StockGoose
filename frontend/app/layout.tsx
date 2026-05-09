@@ -17,7 +17,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#09090b",
+  themeColor: "#FAFAFA",
 };
 
 export default function RootLayout({
@@ -30,7 +30,7 @@ export default function RootLayout({
       <body className={`font-sans antialiased`}>
         <ThemeProvider
           attribute="class"
-          defaultTheme="dark"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >

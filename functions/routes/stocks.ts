@@ -7,6 +7,7 @@ import type {
   StockTrendPoint,
 } from "@shared/types";
 import { ok, fail } from "@utils/response";
+import { getFromCache, putToCache } from "@utils/cache";
 import { proxyGet } from "@utils/proxy";
 import type { Env } from "../types/hono";
 
@@ -30,6 +31,11 @@ type TrendsApiData = {
 type TrendsApiResponse = {
   rc?: number;
   data?: TrendsApiData;
+};
+
+type QuoteFetchResult = {
+  secid: string;
+  quote: StockQuote | null;
 };
 
 export const stockRoutes = new Hono<{ Bindings: Env }>();
@@ -89,6 +95,17 @@ async function fetchTrendData(
   secid: string,
   days: number
 ): Promise<TrendsApiData> {
+  const cacheRequest = new Request(
+    `https://stockgoose.local/stocks/trends?secid=${encodeURIComponent(secid)}&days=${days}`
+  );
+  const cached = await getFromCache(cacheRequest);
+  if (cached) {
+    const cachedBody = (await cached.json()) as TrendsApiResponse;
+    if (cachedBody.rc === 0 && cachedBody.data) {
+      return cachedBody.data;
+    }
+  }
+
   const url = new URL("https://push2.eastmoney.com/api/qt/stock/trends2/get");
   url.searchParams.set("secid", secid);
   url.searchParams.set("fields1", "f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13");
@@ -97,7 +114,26 @@ async function fetchTrendData(
   url.searchParams.set("iscca", "0");
   url.searchParams.set("ndays", String(days));
 
-  const response = await proxyGet(url.toString());
+  let response: Response | null = null;
+  let lastError: unknown = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      response = await proxyGet(url.toString());
+      break;
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
+      }
+    }
+  }
+
+  if (!response) {
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Eastmoney request failed");
+  }
+
   if (!response.ok) {
     throw new Error(`Eastmoney responded with ${response.status}`);
   }
@@ -107,7 +143,46 @@ async function fetchTrendData(
     throw new Error("Eastmoney returned an invalid trends payload");
   }
 
+  await putToCache(
+    cacheRequest,
+    new Response(JSON.stringify(body), {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    }),
+    "stockQuote"
+  );
+
   return body.data;
+}
+
+/**
+ * 小并发抓取自选行情，降低上游瞬时压力。
+ */
+async function fetchQuotesWithLimit(
+  secids: string[]
+): Promise<QuoteFetchResult[]> {
+  const queue = [...secids];
+  const results: QuoteFetchResult[] = [];
+  const concurrency = Math.min(3, queue.length);
+
+  async function worker(): Promise<void> {
+    while (queue.length > 0) {
+      const secid = queue.shift();
+      if (!secid) continue;
+
+      try {
+        const data = await fetchTrendData(secid, 1);
+        results.push({ secid, quote: buildQuote(secid, data) });
+      } catch (error) {
+        console.error("Quote fetch failed:", secid, error);
+        results.push({ secid, quote: null });
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+  return results;
 }
 
 /**
@@ -198,11 +273,8 @@ stockRoutes.get("/quotes", zValidator("query", quotesSchema), async (c) => {
   ).slice(0, 24);
 
   try {
-    const quotes = await Promise.all(
-      secids.map((secid) =>
-        fetchTrendData(secid, 1).then((data) => buildQuote(secid, data))
-      )
-    );
+    const fetched = await fetchQuotesWithLimit(secids);
+    const quotes = fetched.flatMap((item) => (item.quote ? [item.quote] : []));
     return ok(c, quotes);
   } catch (error) {
     console.error("Stock quotes error:", error);
