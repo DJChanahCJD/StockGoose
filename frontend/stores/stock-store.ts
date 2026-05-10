@@ -261,8 +261,8 @@ export const useStockStore = create<StockStoreState>()(
             ),
             lastRefreshAt: new Date().toISOString(),
           }));
-        } catch {
-          // 快照刷新静默失败，不影响已有数据展示
+        } catch (error) {
+          console.error("[store] refreshSnapshots failed:", error);
         }
       },
     }),

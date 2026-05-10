@@ -373,6 +373,7 @@ stockRoutes.get("/realtime", zValidator("query", quotesSchema), async (c) => {
   const qtCodes = secids
     .map(toQtCode)
     .filter((code): code is string => code !== null);
+  console.log("[realtime] input secids:", secids, "-> qtCodes:", qtCodes);
   if (!qtCodes.length) return fail(c, "无有效股票代码", 400);
 
   const cacheRequest = new Request(
@@ -386,11 +387,18 @@ stockRoutes.get("/realtime", zValidator("query", quotesSchema), async (c) => {
   try {
     const url = `http://qt.gtimg.cn/q=${qtCodes.join(",")}`;
     const response = await proxyGet(url);
+    console.log("[realtime] proxyGet status:", response.status);
     if (!response.ok)
       return fail(c, `腾讯行情响应异常: ${response.status}`, 502);
 
     const buffer = await response.arrayBuffer();
     const text = new TextDecoder("gbk").decode(buffer);
+    console.log(
+      "[realtime] decoded body length:",
+      text.length,
+      "preview:",
+      text.slice(0, 500)
+    );
 
     const snapshots = text
       .split("\n")
@@ -399,13 +407,17 @@ stockRoutes.get("/realtime", zValidator("query", quotesSchema), async (c) => {
       .map(parseRealtimeLine)
       .filter((s): s is RealtimeSnapshot => s !== null);
 
-    await putToCache(
-      cacheRequest,
-      new Response(JSON.stringify(snapshots), {
-        headers: { "Content-Type": "application/json" },
-      }),
-      "stockRealtime"
-    );
+    console.log("[realtime] parsed snapshot count:", snapshots.length);
+
+    if (snapshots.length > 0) {
+      await putToCache(
+        cacheRequest,
+        new Response(JSON.stringify(snapshots), {
+          headers: { "Content-Type": "application/json" },
+        }),
+        "stockRealtime"
+      );
+    }
 
     return ok(c, snapshots);
   } catch (error) {
