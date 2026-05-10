@@ -211,6 +211,7 @@ export async function fetchStockQuotes(
 const QT_MARKET_MAP: Record<string, string> = {
   "0": "sz",
   "1": "sh",
+  "105": "us",
   "116": "hk",
 };
 
@@ -219,6 +220,7 @@ const QT_PREFIX_REVERSE: Record<string, string> = {
   sz: "0",
   sh: "1",
   hk: "116",
+  us: "105",
 };
 
 /** EastMoney secid → qt.gtimg.cn 股票代码 (如 0.000858 → sz000858) */
@@ -246,9 +248,10 @@ function parseRealtimeLine(line: string): RealtimeSnapshot | null {
 
   const qtCode = match[1];
   const fields = match[2].split("~");
-  const code = fields[2];
-  const name = fields[1];
   const qtPrefix = qtCode.match(/^[a-z]+/)?.[0] ?? "";
+  const rawCode = fields[2];
+  const code = qtPrefix === "us" ? rawCode.replace(/\.[A-Z]+$/, "") : rawCode;
+  const name = fields[1];
   const market = QT_PREFIX_REVERSE[qtPrefix] ?? "";
   const price = parseNum(fields[3]);
   const previousClose = parseNum(fields[4]);
