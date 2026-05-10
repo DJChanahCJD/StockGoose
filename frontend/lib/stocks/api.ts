@@ -241,7 +241,7 @@ function parseNum(val: string | undefined): number | null {
  * 响应格式: v_sz000858="51~五粮液~000858~27.78~..."
  */
 function parseRealtimeLine(line: string): RealtimeSnapshot | null {
-  const match = line.match(/^v_(\w+)="(.+)"$/);
+  const match = line.match(/^v_(\w+)="(.+)"\s*;?\s*$/);
   if (!match) return null;
 
   const qtCode = match[1];
