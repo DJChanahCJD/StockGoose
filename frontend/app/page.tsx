@@ -38,8 +38,9 @@ export default function HomePage() {
   const [alertDialogQuote, setAlertDialogQuote] = useState<StockQuote | null>(
     null
   );
-  const [detailsDialogQuote, setDetailsDialogQuote] =
-    useState<StockQuote | null>(null);
+  const [detailsDialogSecid, setDetailsDialogSecid] = useState<string | null>(
+    null
+  );
   const [deleteDialogQuote, setDeleteDialogQuote] = useState<StockQuote | null>(
     null
   );
@@ -71,6 +72,7 @@ export default function HomePage() {
     importUserData,
     refreshQuotes,
     refreshQuotesFor,
+    refreshSnapshotFor,
     refreshSnapshots,
   } = useStockStore();
 
@@ -201,8 +203,8 @@ export default function HomePage() {
     if (alertDialogQuote?.secid === deleteDialogQuote.secid) {
       setAlertDialogQuote(null);
     }
-    if (detailsDialogQuote?.secid === deleteDialogQuote.secid) {
-      setDetailsDialogQuote(null);
+    if (detailsDialogSecid === deleteDialogQuote.secid) {
+      setDetailsDialogSecid(null);
     }
     setDeleteDialogQuote(null);
   }
@@ -250,6 +252,10 @@ export default function HomePage() {
       );
   }, [watchlist, quotesBySecid, watchlistFilterTerm, marketFilter]);
 
+  const detailsDialogQuote = detailsDialogSecid
+    ? (quotesBySecid[detailsDialogSecid] ?? null)
+    : null;
+
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-sans selection:bg-accent overflow-hidden">
       <StockHeader
@@ -281,7 +287,7 @@ export default function HomePage() {
             setIsAddDialogOpen(true);
           }}
           onOpenAlertDialog={setAlertDialogQuote}
-          onOpenDetailsDialog={setDetailsDialogQuote}
+          onOpenDetailsDialog={(quote) => setDetailsDialogSecid(quote.secid)}
           onOpenDeleteDialog={setDeleteDialogQuote}
           onVisibleSecidsChange={handleVisibleSecidsChange}
           onReorderWatchlist={reorderWatchlist}
@@ -316,7 +322,8 @@ export default function HomePage() {
       <StockDetailsDialog
         quote={detailsDialogQuote}
         colorMode={colorMode}
-        onClose={() => setDetailsDialogQuote(null)}
+        onClose={() => setDetailsDialogSecid(null)}
+        onRefreshSnapshot={refreshSnapshotFor}
       />
       <DeleteStockDialog
         quote={deleteDialogQuote}

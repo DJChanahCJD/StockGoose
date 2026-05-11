@@ -11,12 +11,42 @@ const MARKET_HK = "116";
 const MARKET_US = "105";
 
 /**
- * 为没有趋势数据的标的生成轻量占位走势。
+ * 从稳定输入生成 32 位种子。
  */
-export function buildFallbackTrend(price: number): number[] {
+function createStableSeed(value: string): number {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+
+  return hash >>> 0;
+}
+
+/**
+ * 基于线性同余算法生成确定性 0..1 浮点数。
+ */
+function nextStableRandom(seed: number): { seed: number; value: number } {
+  const nextSeed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+
+  return {
+    seed: nextSeed,
+    value: nextSeed / 4294967296,
+  };
+}
+
+/**
+ * 为没有趋势数据的标的生成稳定占位走势，避免服务端和客户端首屏不一致。
+ */
+export function buildFallbackTrend(price: number, seedKey: string): number[] {
   let c = price;
+  let seed = createStableSeed(seedKey);
+
   return Array.from({ length: 20 }, () => {
-    c = Math.max(0.01, c + c * 0.01 * (Math.random() - 0.5));
+    const random = nextStableRandom(seed);
+    seed = random.seed;
+    c = Math.max(0.01, c + c * 0.01 * (random.value - 0.5));
     return Number(c.toFixed(2));
   });
 }

@@ -22,8 +22,11 @@ export function useStockQuoteTrend(quote: StockQuote, colorMode: ColorMode) {
   const Icon = isUp ? TrendingUp : TrendingDown;
 
   const fallbackPoints = useMemo(
-    () => buildPolylinePoints(buildFallbackTrend(quote.price ?? 1)),
-    [quote.price]
+    () =>
+      buildPolylinePoints(
+        buildFallbackTrend(quote.price ?? 1, `${quote.secid}:${quote.price}`)
+      ),
+    [quote.price, quote.secid]
   );
   const points = trend ? buildPolylinePoints(trend) : fallbackPoints;
 

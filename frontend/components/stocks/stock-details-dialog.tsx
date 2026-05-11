@@ -27,7 +27,10 @@ type StockDetailsDialogProps = {
   quote: StockQuote | null;
   colorMode: ColorMode;
   onClose: () => void;
+  onRefreshSnapshot: (secid: string) => Promise<void>;
 };
+
+const DETAIL_REFRESH_INTERVAL_MS = 5000;
 
 type RangeOption = {
   value: StockHistoryRange;
@@ -49,12 +52,14 @@ export function StockDetailsDialog({
   quote,
   colorMode,
   onClose,
+  onRefreshSnapshot,
 }: StockDetailsDialogProps) {
   const [range, setRange] = useState<StockHistoryRange>("1m");
   const [history, setHistory] = useState<StockHistoryPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const quoteSecid = quote?.secid ?? null;
   const { colorClass } = quote
     ? getQuoteTone(quote, colorMode)
     : { colorClass: "text-success" };
@@ -63,6 +68,17 @@ export function StockDetailsDialog({
     if (!quote) return [];
     return generateExternalLinks(quote.code, quote.market);
   }, [quote]);
+
+  useEffect(() => {
+    if (!quoteSecid) return;
+
+    void onRefreshSnapshot(quoteSecid);
+    const timer = window.setInterval(() => {
+      void onRefreshSnapshot(quoteSecid);
+    }, DETAIL_REFRESH_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [onRefreshSnapshot, quoteSecid]);
 
   useEffect(() => {
     if (!quote) return;

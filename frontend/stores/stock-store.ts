@@ -18,6 +18,7 @@ export const DEFAULT_WATCHLIST = ["105.AAPL", "116.01810", "1.000300"];
 const QUOTE_BATCH_SIZE = 12;
 const SNAPSHOT_BATCH_SIZE = 12;
 const fullQuoteLoadingSecids = new Set<string>();
+const snapshotLoadingSecids = new Set<string>();
 
 type ColorMode = "us" | "cn";
 
@@ -43,6 +44,7 @@ type StockStoreState = {
   importUserData: (data: StockGooseBackupData) => void;
   refreshQuotes: () => Promise<void>;
   refreshQuotesFor: (secids: string[]) => Promise<void>;
+  refreshSnapshotFor: (secid: string) => Promise<void>;
   refreshSnapshots: () => Promise<void>;
 };
 
@@ -337,6 +339,35 @@ export const useStockStore = create<StockStoreState>()(
         } finally {
           requested.forEach((secid) => fullQuoteLoadingSecids.delete(secid));
           set({ loading: false });
+        }
+      },
+
+      /**
+       * 刷新单个标的的实时快照，供详情弹窗低成本实时更新。
+       */
+      refreshSnapshotFor: async (secid) => {
+        const { watchlist } = get();
+        if (!watchlist.includes(secid)) return;
+        if (snapshotLoadingSecids.has(secid)) return;
+
+        snapshotLoadingSecids.add(secid);
+
+        try {
+          const snapshots = await fetchRealtimeSnapshots([secid]);
+          set((state) => ({
+            quotesBySecid: mergeSnapshotsIntoQuotes(
+              state.watchlist,
+              state.quotesBySecid,
+              snapshots
+            ),
+            lastRefreshAt: snapshots.length
+              ? new Date().toISOString()
+              : state.lastRefreshAt,
+          }));
+        } catch (error) {
+          console.error("[store] refreshSnapshotFor failed:", error);
+        } finally {
+          snapshotLoadingSecids.delete(secid);
         }
       },
 
