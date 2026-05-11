@@ -74,7 +74,9 @@ const historySchema = z.object({
     .string()
     .trim()
     .regex(/^\d+\.[A-Za-z0-9]+$/),
-  range: z.enum(["1m", "3m", "6m", "1y", "all"]).default("1m"),
+  range: z
+    .enum(["1m", "3m", "6m", "1y", "3y", "5y", "10y", "all"])
+    .default("1m"),
 });
 
 const quotesSchema = z.object({
@@ -279,6 +281,9 @@ function filterHistoryByRange(
   if (range === "3m") cutoff.setMonth(cutoff.getMonth() - 3);
   if (range === "6m") cutoff.setMonth(cutoff.getMonth() - 6);
   if (range === "1y") cutoff.setFullYear(cutoff.getFullYear() - 1);
+  if (range === "3y") cutoff.setFullYear(cutoff.getFullYear() - 3);
+  if (range === "5y") cutoff.setFullYear(cutoff.getFullYear() - 5);
+  if (range === "10y") cutoff.setFullYear(cutoff.getFullYear() - 10);
 
   return points.filter((point) => new Date(`${point.date}T00:00:00`) >= cutoff);
 }
@@ -291,6 +296,9 @@ function getHistoryLimit(range: StockHistoryRange): number | null {
   if (range === "3m") return 93;
   if (range === "6m") return 186;
   if (range === "1y") return 366;
+  if (range === "3y") return 1095;
+  if (range === "5y") return 1825;
+  if (range === "10y") return 3650;
   return null;
 }
 

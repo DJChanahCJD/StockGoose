@@ -26,7 +26,15 @@ export type StockTrendPoint = {
   average: number;
 };
 
-export type StockHistoryRange = "1m" | "3m" | "6m" | "1y" | "all";
+export type StockHistoryRange =
+  | "1m"
+  | "3m"
+  | "6m"
+  | "1y"
+  | "3y"
+  | "5y"
+  | "10y"
+  | "all";
 
 export type StockHistoryPoint = {
   date: string;

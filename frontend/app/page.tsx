@@ -44,14 +44,12 @@ export default function HomePage() {
   const [notifications, setNotifications] = useState<
     { id: number; message: string }[]
   >([]);
-  const [runtimeLabel, setRuntimeLabel] = useState<string>("运行中");
 
   const {
     watchlist,
     quotesBySecid,
     alerts,
     loading,
-    lastRefreshAt,
     colorMode,
     marketFilter,
     viewMode,
@@ -81,10 +79,6 @@ export default function HomePage() {
   }, []);
 
   const notifier = useMemo(() => createNotifier("web"), []);
-
-  useEffect(() => {
-    setRuntimeLabel(getRuntimePlatform() === "web" ? "网页代理" : "运行时直连");
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -212,10 +206,6 @@ export default function HomePage() {
       <StockHeader
         filterTerm={watchlistFilterTerm}
         onFilterChange={setWatchlistFilterTerm}
-        marketFilter={marketFilter}
-        onMarketFilterChange={setMarketFilter}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
         colorMode={colorMode}
         onColorModeChange={setColorMode}
       />
@@ -225,10 +215,11 @@ export default function HomePage() {
         visibleStocks={visibleStocks}
         watchlist={watchlist}
         filterTerm={watchlistFilterTerm}
-        runtimeLabel={runtimeLabel}
-        lastRefreshAt={lastRefreshAt}
         colorMode={colorMode}
+        marketFilter={marketFilter}
+        onMarketFilterChange={setMarketFilter}
         viewMode={viewMode}
+        onViewModeChange={setViewMode}
         alerts={alerts}
         onOpenAddDialog={() => setIsAddDialogOpen(true)}
         onOpenAlertDialog={setAlertDialogQuote}

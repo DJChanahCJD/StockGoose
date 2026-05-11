@@ -22,7 +22,7 @@ export class AlertScheduler {
   constructor(options: AlertSchedulerOptions) {
     this.options = {
       ...options,
-      intervalMs: options.intervalMs ?? 15000,
+      intervalMs: options.intervalMs ?? 5000,
     };
   }
 
@@ -96,7 +96,7 @@ export class AlertScheduler {
   private async send(rule: AlertRule, quote: StockQuote): Promise<void> {
     const label = ALERT_LABELS[rule.type];
     const suffix = rule.type.includes("CHANGE") ? "%" : "";
-    const title = `${quote.name || quote.code} 触发提醒`;
+    const title = `${quote.name || quote.code}`;
     const body = `${label} ${rule.threshold}${suffix}`;
     const payload: AlertNotificationPayload = {
       id: rule.id,

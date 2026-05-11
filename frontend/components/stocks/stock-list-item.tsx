@@ -36,7 +36,7 @@ export function StockListItem({
   onDetails,
   onDelete,
 }: StockListItemProps) {
-  const { colorClass, bgLightClass, points } = useStockQuoteTrend(
+  const { colorClass, bgLightClass, isUp, Icon, points } = useStockQuoteTrend(
     quote,
     colorMode
   );
@@ -73,7 +73,7 @@ export function StockListItem({
               }
             }}
             className={cn(
-              "group grid min-h-16 grid-cols-[22px_minmax(0,1fr)_48px_88px_76px] items-center gap-2 rounded-xl border bg-card px-3 py-2 text-card-foreground shadow-sm transition-all hover:border-ring/40 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring",
+              "group grid min-h-16 grid-cols-[22px_minmax(0,1fr)_48px_64px_80px] items-center gap-2 rounded-xl border bg-card px-3 py-2 text-card-foreground shadow-sm transition-all hover:border-ring/40 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring",
               triggered ? "border-warning/40 bg-warning/3" : "border-border"
             )}
           >
@@ -131,18 +131,25 @@ export function StockListItem({
               />
             </svg>
 
-            <div className="text-right font-mono text-lg font-semibold">
+            <div className="text-right font-mono text-sm font-medium">
               {formatNumber(quote.price, 2)}
             </div>
 
             <div className="flex justify-end">
-              <span className={cn("font-mono text-xs font-bold", colorClass)}>
-                {quote.changePercent === null
-                  ? "--"
-                  : `${quote.changePercent >= 0 ? "+" : ""}${
-                      quote.changePercent
-                    }%`}
-              </span>
+              <div
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-md",
+                  bgLightClass
+                )}
+              >
+                <span className={cn("font-mono font-bold", colorClass)}>
+                  {quote.changePercent === null
+                    ? "--"
+                    : `${quote.changePercent >= 0 ? "+" : ""}${
+                        quote.changePercent
+                      }%`}
+                </span>
+              </div>
             </div>
           </div>
         </ContextMenuTrigger>

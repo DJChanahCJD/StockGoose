@@ -18,11 +18,18 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
 } from "@dnd-kit/sortable";
-import { Plus } from "lucide-react";
+import { Grid3x3, List, Plus } from "lucide-react";
 import { GooseLogo } from "@/components/logo";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { isAlertTriggered } from "@/lib/stocks/alert-rules";
-import type { ColorMode, StockViewMode } from "./stock-utils";
-import { formatUpdateTime } from "./stock-utils";
+import type { ColorMode, MarketFilter, StockViewMode } from "./stock-utils";
 import { StockCard } from "./stock-card";
 import { StockListItem } from "./stock-list-item";
 
@@ -31,10 +38,11 @@ type WatchlistGridProps = {
   visibleStocks: StockQuote[];
   watchlist: string[];
   filterTerm: string;
-  runtimeLabel: string;
-  lastRefreshAt: string | null;
   colorMode: ColorMode;
+  marketFilter: MarketFilter;
+  onMarketFilterChange: (value: MarketFilter) => void;
   viewMode: StockViewMode;
+  onViewModeChange: (value: StockViewMode) => void;
   alerts: AlertRule[];
   onOpenAddDialog: () => void;
   onOpenAlertDialog: (quote: StockQuote) => void;
@@ -51,10 +59,11 @@ export function WatchlistGrid({
   visibleStocks,
   watchlist,
   filterTerm,
-  runtimeLabel,
-  lastRefreshAt,
   colorMode,
+  marketFilter,
+  onMarketFilterChange,
   viewMode,
+  onViewModeChange,
   alerts,
   onOpenAddDialog,
   onOpenAlertDialog,
@@ -111,20 +120,59 @@ export function WatchlistGrid({
   /** 渲染头部状态栏 */
   function renderHeader() {
     return (
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-row items-center justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-bold tracking-tight">自选监控</h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            {runtimeLabel} · {watchlist.length} 个标的 · 最近刷新{" "}
-            {formatUpdateTime(lastRefreshAt)}
-          </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-[11px] font-medium text-success bg-success/10 px-2.5 py-1 rounded-full border border-success/20">
-            ● 实时更新中
-          </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Select
+            value={marketFilter}
+            onValueChange={(value) =>
+              onMarketFilterChange(value as MarketFilter)
+            }
+          >
+            <SelectTrigger
+              size="sm"
+              className="h-8 w-[92px] rounded-full bg-background text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部</SelectItem>
+              <SelectItem value="cn">A股</SelectItem>
+              <SelectItem value="hk">港股</SelectItem>
+              <SelectItem value="us">美股</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => {
+              if (value) onViewModeChange(value as StockViewMode);
+            }}
+            size="sm"
+            className="rounded-lg border border-border bg-background"
+          >
+            <ToggleGroupItem
+              value="card"
+              aria-label="卡片模式"
+              title="卡片模式"
+            >
+              <Grid3x3 className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="list"
+              aria-label="列表模式"
+              title="列表模式"
+            >
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+
           <button
+            type="button"
             onClick={onOpenAddDialog}
             className="flex items-center gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 px-3 py-1.5 rounded-full transition-all shadow-sm"
           >

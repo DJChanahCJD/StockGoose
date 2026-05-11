@@ -265,6 +265,8 @@ export const useStockStore = create<StockStoreState>()(
             ),
             lastRefreshAt: new Date().toISOString(),
           }));
+        } catch (error) {
+          console.error("[store] refreshQuotes failed:", error);
         } finally {
           set({ loading: false, refreshing: false });
         }

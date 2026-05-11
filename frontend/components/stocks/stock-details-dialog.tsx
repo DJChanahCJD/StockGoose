@@ -35,12 +35,12 @@ const RANGE_OPTIONS: RangeOption[] = [
   { value: "3m", label: "近3月" },
   { value: "6m", label: "近6月" },
   { value: "1y", label: "近1年" },
+  { value: "3y", label: "近3年" },
+  { value: "5y", label: "近5年" },
+  { value: "10y", label: "近10年" },
   { value: "all", label: "全部" },
 ];
 
-/**
- * 渲染标的历史累计涨跌幅详情弹窗。
- */
 export function StockDetailsDialog({
   quote,
   colorMode,
@@ -60,9 +60,6 @@ export function StockDetailsDialog({
     let cancelled = false;
     const secid = quote.secid;
 
-    /**
-     * 按当前范围加载历史累计涨跌幅。
-     */
     async function loadHistory(): Promise<void> {
       try {
         setLoading(true);
@@ -111,36 +108,16 @@ export function StockDetailsDialog({
                   >
                     {quote.changePercent === null
                       ? "--"
-                      : `${quote.changePercent >= 0 ? "+" : ""}${
-                          quote.changePercent
-                        }%`}
+                      : `${quote.changePercent >= 0 ? "+" : ""}${quote.changePercent}%`}
                   </span>
                 </div>
               </div>
-              <div className="text-right text-xs text-muted-foreground">
+              <div className="text-right text-xs text-muted-foreground ml-auto">
                 <div>市场代码：{quote.marketName || quote.market}</div>
                 <div className="mt-1">
                   更新时间：{formatUpdateTime(quote.updatedAt)}
                 </div>
               </div>
-            </div>
-
-            <div className="flex gap-1 rounded-lg bg-muted p-1">
-              {RANGE_OPTIONS.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setRange(item.value)}
-                  className={cn(
-                    "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                    range === item.value
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {item.label}
-                </button>
-              ))}
             </div>
 
             <div className="min-h-[300px] rounded-xl border border-border bg-card p-4">
@@ -162,6 +139,26 @@ export function StockDetailsDialog({
                 />
               )}
             </div>
+
+            <div className="overflow-x-auto">
+              <div className="flex gap-1 rounded-lg bg-muted p-1 min-w-max">
+                {RANGE_OPTIONS.map((item) => (
+                  <button
+                    key={item.value}
+                    type="button"
+                    onClick={() => setRange(item.value)}
+                    className={cn(
+                      "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                      range === item.value
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </>
         )}
       </DialogContent>
@@ -169,9 +166,6 @@ export function StockDetailsDialog({
   );
 }
 
-/**
- * 渲染历史走势错误态和重试入口。
- */
 function HistoryError({
   message,
   onRetry,
@@ -194,9 +188,6 @@ function HistoryError({
   );
 }
 
-/**
- * 渲染历史累计涨跌幅 SVG 折线图。
- */
 function HistoryChart({
   points,
   colorMode,
@@ -205,48 +196,34 @@ function HistoryChart({
   colorMode: ColorMode;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-  const values = points.map((point) => point.changePercent);
-  const min = Math.min(...values, 0);
-  const max = Math.max(...values, 0);
-  const range = max - min || 1;
+
+  const { path, min, range, zeroY } = useMemo(() => {
+    const values = points.map((p) => p.changePercent);
+    const minVal = Math.min(...values, 0);
+    const maxVal = Math.max(...values, 0);
+    const rangeVal = maxVal - minVal || 1;
+
+    const getY = (val: number) => 95 - ((val - minVal) / rangeVal) * 90;
+
+    const pathString = points
+      .map((point, index) => {
+        const x = (index / (points.length - 1)) * 100;
+        return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${getY(point.changePercent).toFixed(2)}`;
+      })
+      .join(" ");
+
+    return { path: pathString, min: minVal, range: rangeVal, zeroY: getY(0) };
+  }, [points]);
+
   const activeIndex = hoverIndex ?? points.length - 1;
   const active = points[activeIndex];
-  const path = useMemo(
-    () =>
-      points
-        .map((point, index) => {
-          const x = (index / (points.length - 1)) * 100;
-          const y = 100 - ((point.changePercent - min) / range) * 100;
-          return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-        })
-        .join(" "),
-    [points, min, range]
-  );
-  const zeroY = 100 - ((0 - min) / range) * 100;
   const activeX = (activeIndex / (points.length - 1)) * 100;
-  const activeY = 100 - ((active.changePercent - min) / range) * 100;
-  const isUp = active.changePercent >= 0;
-  const activeToneClass =
-    colorMode === "cn"
-      ? isUp
-        ? "text-danger"
-        : "text-success"
-      : isUp
-        ? "text-success"
-        : "text-danger";
-  const activeFillClass =
-    colorMode === "cn"
-      ? isUp
-        ? "fill-danger"
-        : "fill-success"
-      : isUp
-        ? "fill-success"
-        : "fill-danger";
 
-  /**
-   * 根据鼠标位置更新当前 hover 数据点。
-   */
-  function handlePointerMove(event: React.PointerEvent<SVGSVGElement>): void {
+  const isUp = active.changePercent >= 0;
+  const isRedTone = colorMode === "cn" ? isUp : !isUp;
+  const toneTextClass = isRedTone ? "text-danger" : "text-success";
+
+  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>): void {
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = Math.min(
       1,
@@ -259,70 +236,68 @@ function HistoryChart({
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs text-muted-foreground">{active.date}</div>
+          <div className="text-xs text-muted-foreground font-medium">
+            {active.date}
+          </div>
           <div
-            className={cn(
-              "mt-1 font-mono text-2xl font-semibold",
-              activeToneClass
-            )}
+            className={cn("mt-1 font-mono text-2xl font-bold", toneTextClass)}
           >
-            {active.changePercent >= 0 ? "+" : ""}
+            {isUp ? "+" : ""}
             {active.changePercent.toFixed(2)}%
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xs text-muted-foreground">收盘价</div>
-          <div className="mt-1 font-mono text-sm">
+          <div className="text-xs text-muted-foreground font-medium">
+            收盘价
+          </div>
+          <div className="mt-1 font-mono text-base font-semibold">
             {formatNumber(active.close, 2)}
           </div>
         </div>
       </div>
 
-      <svg
-        viewBox="0 0 100 100"
-        className="h-56 w-full overflow-visible"
-        preserveAspectRatio="none"
+      <div
+        className="relative h-56 w-full cursor-crosshair touch-none"
         onPointerMove={handlePointerMove}
         onPointerLeave={() => setHoverIndex(null)}
       >
-        <line
-          x1="0"
-          x2="100"
-          y1={zeroY}
-          y2={zeroY}
-          stroke="currentColor"
-          strokeDasharray="3 3"
-          className="text-border"
-          vectorEffect="non-scaling-stroke"
-        />
-        <path
-          d={path}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className={activeToneClass}
-          vectorEffect="non-scaling-stroke"
-        />
-        <line
-          x1={activeX}
-          x2={activeX}
-          y1="0"
-          y2="100"
-          stroke="currentColor"
-          strokeDasharray="2 3"
-          className="text-muted-foreground/50"
-          vectorEffect="non-scaling-stroke"
-        />
-        <circle
-          cx={activeX}
-          cy={activeY}
-          r="1.6"
-          className={activeFillClass}
-          vectorEffect="non-scaling-stroke"
-        />
-      </svg>
+        <svg
+          viewBox="0 0 100 100"
+          className="absolute inset-0 h-full w-full overflow-visible pointer-events-none"
+          preserveAspectRatio="none"
+        >
+          <line
+            x1="0"
+            x2="100"
+            y1={zeroY}
+            y2={zeroY}
+            stroke="currentColor"
+            strokeDasharray="3 3"
+            className="text-border"
+            vectorEffect="non-scaling-stroke"
+          />
+          <path
+            d={path}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={toneTextClass}
+            vectorEffect="non-scaling-stroke"
+          />
+          <line
+            x1={activeX}
+            x2={activeX}
+            y1="0"
+            y2="100"
+            stroke="currentColor"
+            strokeDasharray="2 3"
+            className="text-muted-foreground/50"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      </div>
     </div>
   );
 }

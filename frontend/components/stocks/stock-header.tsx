@@ -1,25 +1,35 @@
 "use client";
 
-import { Grid2X2, List, Palette, Search, X } from "lucide-react";
+import { useState } from "react";
+import {
+  Moon,
+  Palette,
+  Search,
+  Settings2,
+  Square,
+  Sun,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from "lucide-react";
 import { GooseLogo } from "@/components/logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import type { ColorMode, MarketFilter, StockViewMode } from "./stock-utils";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useTheme } from "next-themes";
+import type { ColorMode } from "./stock-utils";
 
 type StockHeaderProps = {
   filterTerm: string;
   onFilterChange: (value: string) => void;
-  marketFilter: MarketFilter;
-  onMarketFilterChange: (value: MarketFilter) => void;
-  viewMode: StockViewMode;
-  onViewModeChange: (value: StockViewMode) => void;
   colorMode: ColorMode;
   onColorModeChange: (mode: ColorMode) => void;
 };
@@ -30,91 +40,159 @@ type StockHeaderProps = {
 export function StockHeader({
   filterTerm,
   onFilterChange,
-  marketFilter,
-  onMarketFilterChange,
-  viewMode,
-  onViewModeChange,
   colorMode,
   onColorModeChange,
 }: StockHeaderProps) {
+  const isMobile = useIsMobile();
+  const { theme, setTheme } = useTheme();
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+
+  /**
+   * 清空当前自选筛选词并关闭移动端搜索栏。
+   */
+  function clearSearch(): void {
+    onFilterChange("");
+    if (isMobile) setMobileSearchOpen(false);
+  }
+
+  /**
+   * 渲染股票名称与代码筛选输入框。
+   */
+  function renderSearchInput(className = "") {
+    return (
+      <div className={`relative group ${className}`}>
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
+        <input
+          value={filterTerm}
+          onChange={(event) => onFilterChange(event.target.value)}
+          placeholder="搜索自选代码或名称..."
+          className="w-full bg-background border border-input rounded-full py-1.5 pl-9 pr-8 text-xs focus:outline-none focus:ring-1 focus:ring-ring transition-all placeholder:text-muted-foreground text-foreground"
+          autoFocus={isMobile}
+        />
+        {(filterTerm || isMobile) && (
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label={filterTerm ? "清空搜索" : "关闭搜索"}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  /**
+   * 渲染移动端外观设置抽屉。
+   */
+  function renderMobileSettings() {
+    return (
+      <Drawer>
+        <DrawerTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground hover:text-foreground"
+            aria-label="打开外观设置"
+          >
+            <Settings2 className="w-4 h-4" />
+          </Button>
+        </DrawerTrigger>
+        <DrawerContent>
+          <DrawerHeader className="text-left">
+            <DrawerTitle className="text-sm">显示设置</DrawerTitle>
+          </DrawerHeader>
+          <div className="px-4 pb-5 space-y-4">
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                涨跌颜色
+              </div>
+              <ToggleGroup
+                type="single"
+                value={colorMode}
+                onValueChange={(value) => {
+                  if (value) onColorModeChange(value as ColorMode);
+                }}
+                size="sm"
+                className="grid w-full grid-cols-2 rounded-lg border border-border bg-background"
+              >
+                <ToggleGroupItem value="cn" aria-label="红涨绿跌">
+                  <TrendingUp
+                    className="h-5 w-5 text-red-500"
+                    strokeWidth={2.5}
+                  />
+                  红涨绿跌
+                </ToggleGroupItem>
+                <ToggleGroupItem value="us" aria-label="绿涨红跌">
+                  <TrendingUp
+                    className="h-5 w-5 text-green-500"
+                    strokeWidth={2.5}
+                  />
+                  绿涨红跌
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                主题
+              </div>
+              <ToggleGroup
+                type="single"
+                value={theme}
+                onValueChange={(value) => {
+                  if (value) setTheme(value);
+                }}
+                size="sm"
+                className="grid w-full grid-cols-2 rounded-lg border border-border bg-background"
+              >
+                <ToggleGroupItem value="light" aria-label="浅色模式">
+                  <Sun className="h-4 w-4" />
+                  浅色
+                </ToggleGroupItem>
+                <ToggleGroupItem value="dark" aria-label="深色模式">
+                  <Moon className="h-4 w-4" />
+                  深色
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
   return (
     <header
-      className="h-14 bg-card border-b border-border select-none shrink-0 z-10"
+      className="min-h-14 bg-card border-b border-border select-none shrink-0 z-10"
       data-tauri-drag-region
     >
-      <div className="max-w-7xl mx-auto w-full h-full px-4 flex items-center justify-between pointer-events-none">
+      <div className="max-w-7xl mx-auto w-full min-h-14 px-6 flex items-center justify-between gap-3 pointer-events-none">
         <div className="flex items-center gap-3 text-foreground">
           <GooseLogo className="w-5 h-5" />
           <span className="font-bold tracking-tight text-sm">StockGoose</span>
         </div>
 
         <div className="flex items-center gap-2 pointer-events-auto">
-          <Select
-            value={marketFilter}
-            onValueChange={(value) =>
-              onMarketFilterChange(value as MarketFilter)
-            }
-          >
-            <SelectTrigger
-              size="sm"
-              className="h-8 w-[92px] rounded-full text-xs"
+          {isMobile ? (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setMobileSearchOpen((open) => !open)}
+              className="text-muted-foreground hover:text-foreground"
+              aria-label="搜索自选"
             >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="cn">A股</SelectItem>
-              <SelectItem value="hk">港股</SelectItem>
-              <SelectItem value="us">美股</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <div className="relative group w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
-            <input
-              value={filterTerm}
-              onChange={(event) => onFilterChange(event.target.value)}
-              placeholder="搜索自选代码或名称..."
-              className="w-full bg-background border border-input rounded-full py-1.5 pl-9 pr-8 text-xs focus:outline-none focus:ring-1 focus:ring-ring transition-all placeholder:text-muted-foreground text-foreground"
-            />
-            {filterTerm && (
-              <button
-                onClick={() => onFilterChange("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          <ToggleGroup
-            type="single"
-            value={viewMode}
-            onValueChange={(value) => {
-              if (value) onViewModeChange(value as StockViewMode);
-            }}
-            size="sm"
-            className="rounded-lg border border-border bg-background"
-          >
-            <ToggleGroupItem
-              value="card"
-              aria-label="卡片模式"
-              title="卡片模式"
-            >
-              <Grid2X2 className="h-4 w-4" />
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value="list"
-              aria-label="列表模式"
-              title="列表模式"
-            >
-              <List className="h-4 w-4" />
-            </ToggleGroupItem>
-          </ToggleGroup>
+              <Search className="w-4 h-4" />
+            </Button>
+          ) : (
+            renderSearchInput("w-64")
+          )}
 
           <button
+            type="button"
             onClick={() => onColorModeChange(colorMode === "us" ? "cn" : "us")}
-            className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+            className="hidden md:inline-flex p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
             title={
               colorMode === "us"
                 ? "切换为红涨绿跌 (国内市场)"
@@ -123,9 +201,17 @@ export function StockHeader({
           >
             <Palette className="w-4 h-4" />
           </button>
-          <ThemeToggle />
+          <div className="hidden md:block">
+            <ThemeToggle />
+          </div>
+          <div className="md:hidden">{renderMobileSettings()}</div>
         </div>
       </div>
+      {isMobile && mobileSearchOpen && (
+        <div className="px-6 pb-3 pointer-events-auto">
+          {renderSearchInput("w-full")}
+        </div>
+      )}
     </header>
   );
 }
