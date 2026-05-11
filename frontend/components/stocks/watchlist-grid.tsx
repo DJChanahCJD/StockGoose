@@ -20,6 +20,7 @@ import {
 } from "@dnd-kit/sortable";
 import { Plus } from "lucide-react";
 import { GooseLogo } from "@/components/logo";
+import { isAlertTriggered } from "@/lib/stocks/alert-rules";
 import type { ColorMode, StockViewMode } from "./stock-utils";
 import { formatUpdateTime } from "./stock-utils";
 import { StockCard } from "./stock-card";
@@ -81,6 +82,17 @@ export function WatchlistGrid({
     () => new Set(alerts.map((a) => a.secid)),
     [alerts]
   );
+
+  const triggeredSecids = useMemo(() => {
+    const triggered = new Set<string>();
+    for (const rule of alerts) {
+      const quote = visibleStocks.find((s) => s.secid === rule.secid);
+      if (quote && isAlertTriggered(rule, quote)) {
+        triggered.add(rule.secid);
+      }
+    }
+    return triggered;
+  }, [alerts, visibleStocks]);
 
   /**
    * 将拖拽结束事件转换为新的 watchlist 顺序。
@@ -162,6 +174,8 @@ export function WatchlistGrid({
               quote={stock}
               colorMode={colorMode}
               dragDisabled={dragDisabled}
+              hasAlert={alertedSecids.has(stock.secid)}
+              triggered={triggeredSecids.has(stock.secid)}
               onAlert={() => onOpenAlertDialog(stock)}
               onDetails={() => onOpenDetailsDialog(stock)}
               onDelete={() => onOpenDeleteDialog(stock)}
@@ -179,6 +193,7 @@ export function WatchlistGrid({
             quote={stock}
             colorMode={colorMode}
             hasAlert={alertedSecids.has(stock.secid)}
+            triggered={triggeredSecids.has(stock.secid)}
             dragDisabled={dragDisabled}
             onAlert={() => onOpenAlertDialog(stock)}
             onDetails={() => onOpenDetailsDialog(stock)}

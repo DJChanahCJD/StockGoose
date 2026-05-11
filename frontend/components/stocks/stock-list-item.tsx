@@ -16,6 +16,7 @@ type StockListItemProps = {
   quote: StockQuote;
   colorMode: ColorMode;
   hasAlert: boolean;
+  triggered: boolean;
   dragDisabled: boolean;
   onAlert: () => void;
   onDetails: () => void;
@@ -29,6 +30,7 @@ export function StockListItem({
   quote,
   colorMode,
   hasAlert,
+  triggered,
   dragDisabled,
   onAlert,
   onDetails,
@@ -70,7 +72,10 @@ export function StockListItem({
                 onDetails();
               }
             }}
-            className="group grid min-h-16 grid-cols-[22px_minmax(0,1fr)_48px_88px_76px] items-center gap-2 rounded-xl border border-border bg-card px-3 py-2 text-card-foreground shadow-sm transition-all hover:border-ring/40 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              "group grid min-h-16 grid-cols-[22px_minmax(0,1fr)_48px_88px_76px] items-center gap-2 rounded-xl border bg-card px-3 py-2 text-card-foreground shadow-sm transition-all hover:border-ring/40 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring",
+              triggered ? "border-warning/40 bg-warning/3" : "border-border"
+            )}
           >
             <button
               ref={setActivatorNodeRef}
@@ -92,12 +97,17 @@ export function StockListItem({
             </button>
 
             <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-2">
+              <div className="flex min-w-0 items-center gap-1">
                 <span className="truncate text-sm font-semibold">
                   {quote.name}
                 </span>
                 {hasAlert && (
-                  <Bell className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <Bell
+                    className={cn(
+                      "h-3.5 w-3.5 shrink-0",
+                      triggered ? "text-warning" : "text-muted-foreground"
+                    )}
+                  />
                 )}
               </div>
               <div className="mt-1 font-mono text-[11px] text-muted-foreground">

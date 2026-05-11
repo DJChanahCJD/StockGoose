@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import type { StockQuote } from "@shared/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Clock3, GripHorizontal } from "lucide-react";
+import { Bell, Clock3, GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { useStockQuoteTrend } from "@/hooks/use-stock-quote-trend";
@@ -16,6 +16,8 @@ type StockCardProps = {
   quote: StockQuote;
   colorMode: ColorMode;
   dragDisabled: boolean;
+  hasAlert: boolean;
+  triggered: boolean;
   onAlert: () => void;
   onDetails: () => void;
   onDelete: () => void;
@@ -28,6 +30,8 @@ export function StockCard({
   quote,
   colorMode,
   dragDisabled,
+  hasAlert,
+  triggered,
   onAlert,
   onDetails,
   onDelete,
@@ -68,16 +72,31 @@ export function StockCard({
                 onDetails();
               }
             }}
-            className="group relative bg-card text-card-foreground rounded-2xl p-5 shadow-sm border border-border hover:shadow-md hover:border-ring/40 transition-all duration-300 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring"
+            className={cn(
+              "group relative bg-card text-card-foreground rounded-2xl p-5 shadow-sm border transition-all duration-300 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring hover:scale-[1.02]",
+              triggered
+                ? "border-warning/40 ring-1 ring-warning/20 hover:shadow-md"
+                : "border-border hover:shadow-md hover:border-ring/40"
+            )}
           >
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h2
-                  className="text-base font-bold tracking-tight truncate max-w-[140px]"
-                  title={quote.name}
-                >
-                  {quote.name}
-                </h2>
+                <div className="flex items-center gap-2 min-w-0">
+                  <h2
+                    className="text-base font-bold tracking-tight truncate max-w-[140px]"
+                    title={quote.name}
+                  >
+                    {quote.name}
+                  </h2>
+                  {hasAlert && (
+                    <Bell
+                      className={cn(
+                        "h-3.5 w-3.5 shrink-0",
+                        triggered ? "text-warning" : "text-muted-foreground"
+                      )}
+                    />
+                  )}
+                </div>
                 <div className="flex items-center mt-1.5">
                   <span className="text-[11px] font-mono font-medium bg-secondary text-secondary-foreground px-2 py-0.5 rounded-md border border-border/50">
                     {quote.code}
