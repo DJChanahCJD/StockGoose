@@ -2,7 +2,7 @@ import type { AlertRule, StockQuote } from "@shared/types";
 
 export type AlertDraft = { type: AlertRule["type"]; threshold: string };
 export type ColorMode = "us" | "cn";
-export type MarketFilter = "all" | "cn" | "hk" | "us";
+export type MarketFilter = "all" | "cn" | "hk" | "us" | "other";
 export type StockViewMode = "card" | "list";
 
 /** EastMoney 市场码常量，与 api.ts QT_MARKET_MAP 保持一致 */
@@ -53,11 +53,17 @@ export function matchesMarketFilter(
   quote: StockQuote,
   filter: MarketFilter
 ): boolean {
+  const isCnMarket = MARKET_CN.includes(
+    quote.market as (typeof MARKET_CN)[number]
+  );
+  const isKnownMarket =
+    isCnMarket || quote.market === MARKET_HK || quote.market === MARKET_US;
+
   if (filter === "all") return true;
-  if (filter === "cn")
-    return MARKET_CN.includes(quote.market as (typeof MARKET_CN)[number]);
+  if (filter === "cn") return isCnMarket;
   if (filter === "hk") return quote.market === MARKET_HK;
-  return quote.market === MARKET_US;
+  if (filter === "us") return quote.market === MARKET_US;
+  return !isKnownMarket;
 }
 
 /**

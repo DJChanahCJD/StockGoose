@@ -62,6 +62,7 @@ export default function HomePage() {
     addAlert: addAlertRule,
     removeAlert: removeAlertRule,
     refreshQuotes,
+    refreshQuotesFor,
     refreshSnapshots,
   } = useStockStore();
 
@@ -115,6 +116,16 @@ export default function HomePage() {
       scheduler?.stop();
     };
   }, [notifier, pushNotification, refreshQuotes, refreshSnapshots]);
+
+  /**
+   * 为当前网格已展开的标的补齐完整分时行情。
+   */
+  const handleVisibleSecidsChange = useCallback(
+    (secids: string[]): void => {
+      void refreshQuotesFor(secids);
+    },
+    [refreshQuotesFor]
+  );
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -225,6 +236,7 @@ export default function HomePage() {
         onOpenAlertDialog={setAlertDialogQuote}
         onOpenDetailsDialog={setDetailsDialogQuote}
         onOpenDeleteDialog={setDeleteDialogQuote}
+        onVisibleSecidsChange={handleVisibleSecidsChange}
         onReorderWatchlist={reorderWatchlist}
       />
 

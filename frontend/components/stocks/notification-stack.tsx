@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle } from "lucide-react";
+import { BellRing } from "lucide-react";
 
 type NotificationStackProps = {
   notifications: { id: number; message: string }[];
@@ -17,7 +17,7 @@ export function NotificationStack({ notifications }: NotificationStackProps) {
           key={notification.id}
           className="bg-foreground text-background px-4 py-3 rounded-xl shadow-lg flex items-center gap-3 animate-in slide-in-from-right-4 fade-in"
         >
-          <AlertCircle className="w-5 h-5 text-destructive" />
+          <BellRing className="w-5 h-5 text-warning mt-0.5" />
           <span className="text-sm font-medium">{notification.message}</span>
         </div>
       ))}

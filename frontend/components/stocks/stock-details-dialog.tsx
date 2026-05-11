@@ -138,25 +138,26 @@ export function StockDetailsDialog({
                   onRetry={() => setReloadKey((current) => current + 1)}
                 />
               )}
-            </div>
-
-            <div className="overflow-x-auto">
-              <div className="flex gap-1 rounded-lg bg-muted p-1 min-w-max">
-                {RANGE_OPTIONS.map((item) => (
-                  <button
-                    key={item.value}
-                    type="button"
-                    onClick={() => setRange(item.value)}
-                    className={cn(
-                      "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                      range === item.value
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              <div className="mt-4 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-muted/30 border-t border-border">
+                <div className="overflow-x-auto">
+                  <div className="flex gap-1 rounded-lg bg-muted p-1 min-w-max">
+                    {RANGE_OPTIONS.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onClick={() => setRange(item.value)}
+                        className={cn(
+                          "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
+                          range === item.value
+                            ? "bg-background text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground"
+                        )}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           </>

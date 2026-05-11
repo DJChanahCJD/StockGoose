@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import type { StockQuote } from "@shared/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Bell, Clock3, GripHorizontal } from "lucide-react";
+import { BellRing, Clock3, GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { useStockQuoteTrend } from "@/hooks/use-stock-quote-trend";
@@ -89,7 +89,7 @@ export function StockCard({
                     {quote.name}
                   </h2>
                   {hasAlert && (
-                    <Bell
+                    <BellRing
                       className={cn(
                         "h-3.5 w-3.5 shrink-0",
                         triggered ? "text-warning" : "text-muted-foreground"

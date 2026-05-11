@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import type { StockQuote } from "@shared/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Bell, GripVertical } from "lucide-react";
+import { BellRing, GripVertical } from "lucide-react";
 import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import { useStockQuoteTrend } from "@/hooks/use-stock-quote-trend";
@@ -102,7 +102,7 @@ export function StockListItem({
                   {quote.name}
                 </span>
                 {hasAlert && (
-                  <Bell
+                  <BellRing
                     className={cn(
                       "h-3.5 w-3.5 shrink-0",
                       triggered ? "text-warning" : "text-muted-foreground"

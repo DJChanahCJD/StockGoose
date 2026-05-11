@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AlertRule, StockQuote } from "@shared/types";
 import {
   closestCenter,
@@ -33,6 +33,8 @@ import type { ColorMode, MarketFilter, StockViewMode } from "./stock-utils";
 import { StockCard } from "./stock-card";
 import { StockListItem } from "./stock-list-item";
 
+const WATCHLIST_PAGE_SIZE = 12;
+
 type WatchlistGridProps = {
   loading: boolean;
   visibleStocks: StockQuote[];
@@ -48,6 +50,7 @@ type WatchlistGridProps = {
   onOpenAlertDialog: (quote: StockQuote) => void;
   onOpenDetailsDialog: (quote: StockQuote) => void;
   onOpenDeleteDialog: (quote: StockQuote) => void;
+  onVisibleSecidsChange: (secids: string[]) => void;
   onReorderWatchlist: (nextWatchlist: string[]) => void;
 };
 
@@ -69,9 +72,20 @@ export function WatchlistGrid({
   onOpenAlertDialog,
   onOpenDetailsDialog,
   onOpenDeleteDialog,
+  onVisibleSecidsChange,
   onReorderWatchlist,
 }: WatchlistGridProps) {
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
   const dragDisabled = Boolean(filterTerm.trim());
+  const visibleResetKey = `${filterTerm.trim()}|${marketFilter}`;
+  const [visibleState, setVisibleState] = useState({
+    key: visibleResetKey,
+    limit: WATCHLIST_PAGE_SIZE,
+  });
+  const visibleLimit =
+    visibleState.key === visibleResetKey
+      ? visibleState.limit
+      : WATCHLIST_PAGE_SIZE;
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -103,6 +117,23 @@ export function WatchlistGrid({
     return triggered;
   }, [alerts, visibleStocks]);
 
+  const renderedStocks = useMemo(
+    () => visibleStocks.slice(0, visibleLimit),
+    [visibleStocks, visibleLimit]
+  );
+  const renderedSecids = useMemo(
+    () => renderedStocks.map((stock) => stock.secid),
+    [renderedStocks]
+  );
+  const renderedSecidsKey = renderedSecids.join(",");
+  const hasMoreStocks = renderedStocks.length < visibleStocks.length;
+
+  useEffect(() => {
+    onVisibleSecidsChange(
+      renderedSecidsKey ? renderedSecidsKey.split(",") : []
+    );
+  }, [onVisibleSecidsChange, renderedSecidsKey]);
+
   /**
    * 将拖拽结束事件转换为新的 watchlist 顺序。
    */
@@ -110,12 +141,59 @@ export function WatchlistGrid({
     const { active, over } = event;
     if (!over || active.id === over.id || dragDisabled) return;
 
+    if (
+      !renderedSecids.includes(String(active.id)) ||
+      !renderedSecids.includes(String(over.id))
+    ) {
+      return;
+    }
+
     const oldIndex = watchlist.indexOf(String(active.id));
     const newIndex = watchlist.indexOf(String(over.id));
     if (oldIndex < 0 || newIndex < 0) return;
 
     onReorderWatchlist(arrayMove(watchlist, oldIndex, newIndex));
   }
+
+  /**
+   * 追加下一批可见标的。
+   */
+  const handleLoadMore = useCallback((): void => {
+    setVisibleState((current) =>
+      current.key === visibleResetKey
+        ? {
+            key: visibleResetKey,
+            limit: Math.min(
+              current.limit + WATCHLIST_PAGE_SIZE,
+              visibleStocks.length
+            ),
+          }
+        : {
+            key: visibleResetKey,
+            limit: Math.min(WATCHLIST_PAGE_SIZE * 2, visibleStocks.length),
+          }
+    );
+  }, [visibleResetKey, visibleStocks.length]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || !hasMoreStocks) return;
+
+    /**
+     * 监听底部哨兵元素，进入视口时自动追加下一批标的。
+     */
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          handleLoadMore();
+        }
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [handleLoadMore, hasMoreStocks, visibleResetKey, visibleStocks.length]);
 
   /** 渲染头部状态栏 */
   function renderHeader() {
@@ -134,7 +212,7 @@ export function WatchlistGrid({
           >
             <SelectTrigger
               size="sm"
-              className="h-8 w-[92px] rounded-full bg-background text-xs"
+              className="h-8 w-[92px] rounded-lg bg-background text-xs"
             >
               <SelectValue />
             </SelectTrigger>
@@ -143,6 +221,7 @@ export function WatchlistGrid({
               <SelectItem value="cn">A股</SelectItem>
               <SelectItem value="hk">港股</SelectItem>
               <SelectItem value="us">美股</SelectItem>
+              <SelectItem value="other">其他</SelectItem>
             </SelectContent>
           </Select>
 
@@ -174,7 +253,7 @@ export function WatchlistGrid({
           <button
             type="button"
             onClick={onOpenAddDialog}
-            className="flex items-center gap-1.5 text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 px-3 py-1.5 rounded-full transition-all shadow-sm"
+            className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-medium text-primary-foreground shadow-sm transition-all hover:opacity-90"
           >
             <Plus className="w-3.5 h-3.5" /> 添加自选
           </button>
@@ -216,7 +295,7 @@ export function WatchlistGrid({
     if (viewMode === "card") {
       return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {visibleStocks.map((stock) => (
+          {renderedStocks.map((stock) => (
             <StockCard
               key={stock.secid}
               quote={stock}
@@ -235,7 +314,7 @@ export function WatchlistGrid({
 
     return (
       <div className="flex flex-col gap-2">
-        {visibleStocks.map((stock) => (
+        {renderedStocks.map((stock) => (
           <StockListItem
             key={stock.secid}
             quote={stock}
@@ -252,6 +331,24 @@ export function WatchlistGrid({
     );
   }
 
+  /** 渲染底部加载更多入口 */
+  function renderLoadMore() {
+    if (!hasMoreStocks) return null;
+
+    return (
+      <div className="mt-5 flex justify-center">
+        <div ref={loadMoreRef} className="h-px w-px" aria-hidden="true" />
+        <button
+          type="button"
+          onClick={handleLoadMore}
+          className="rounded-lg border border-border bg-background px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:border-ring/40 hover:text-foreground"
+        >
+          加载更多
+        </button>
+      </div>
+    );
+  }
+
   /** 决定当前应渲染的内容区 */
   function renderBody() {
     if (loading && !visibleStocks.length) return renderLoading();
@@ -263,9 +360,10 @@ export function WatchlistGrid({
         collisionDetection={closestCenter}
         onDragEnd={handleDragEnd}
       >
-        <SortableContext items={watchlist} strategy={rectSortingStrategy}>
+        <SortableContext items={renderedSecids} strategy={rectSortingStrategy}>
           {renderContent()}
         </SortableContext>
+        {renderLoadMore()}
       </DndContext>
     );
   }

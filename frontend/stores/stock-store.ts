@@ -14,6 +14,9 @@ import type {
 
 export const STOCK_STORE_KEY = "stockgoose_data";
 export const DEFAULT_WATCHLIST = ["105.AAPL", "116.01810", "1.000300"];
+const QUOTE_BATCH_SIZE = 12;
+const SNAPSHOT_BATCH_SIZE = 12;
+const fullQuoteLoadingSecids = new Set<string>();
 
 type ColorMode = "us" | "cn";
 
@@ -36,6 +39,7 @@ type StockStoreState = {
   addAlert: (rule: AlertRule) => void;
   removeAlert: (id: string) => void;
   refreshQuotes: () => Promise<void>;
+  refreshQuotesFor: (secids: string[]) => Promise<void>;
   refreshSnapshots: () => Promise<void>;
 };
 
@@ -145,6 +149,19 @@ function mergeSnapshotsIntoQuotes(
   return next;
 }
 
+/**
+ * 将数组按固定大小切成多个批次。
+ */
+function chunkItems<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
+}
+
 export const useStockStore = create<StockStoreState>()(
   persist(
     (set, get) => ({
@@ -239,16 +256,33 @@ export const useStockStore = create<StockStoreState>()(
        * 刷新自选行情，接口缺失项保留最新已知数据。
        */
       refreshQuotes: async () => {
-        const { watchlist, refreshing } = get();
+        const { watchlist } = get();
+        await get().refreshQuotesFor(watchlist.slice(0, QUOTE_BATCH_SIZE));
+      },
+
+      /**
+       * 按指定标的批量刷新完整行情，适配首屏和滚动可见范围加载。
+       */
+      refreshQuotesFor: async (secids) => {
+        const { watchlist } = get();
         if (!watchlist.length) {
-          set({ quotesBySecid: {}, loading: false, refreshing: false });
+          set({
+            quotesBySecid: {},
+            loading: false,
+            refreshing: false,
+          });
           return;
         }
-        if (refreshing) return;
+
+        const requested = Array.from(new Set(secids)).filter(
+          (secid) =>
+            watchlist.includes(secid) && !fullQuoteLoadingSecids.has(secid)
+        );
+        if (!requested.length) return;
+        requested.forEach((secid) => fullQuoteLoadingSecids.add(secid));
 
         set((state) => ({
           loading: Object.keys(state.quotesBySecid).length === 0,
-          refreshing: true,
           quotesBySecid: ensureWatchlistQuotes(
             state.watchlist,
             state.quotesBySecid
@@ -256,7 +290,12 @@ export const useStockStore = create<StockStoreState>()(
         }));
 
         try {
-          const data = await fetchStockQuotes(watchlist);
+          const batches = chunkItems(requested, QUOTE_BATCH_SIZE);
+          const data: StockQuote[] = [];
+          for (const batch of batches) {
+            data.push(...(await fetchStockQuotes(batch)));
+          }
+
           set((state) => ({
             quotesBySecid: mergeQuotes(
               state.watchlist,
@@ -268,7 +307,8 @@ export const useStockStore = create<StockStoreState>()(
         } catch (error) {
           console.error("[store] refreshQuotes failed:", error);
         } finally {
-          set({ loading: false, refreshing: false });
+          requested.forEach((secid) => fullQuoteLoadingSecids.delete(secid));
+          set({ loading: false });
         }
       },
 
@@ -277,11 +317,18 @@ export const useStockStore = create<StockStoreState>()(
        * 轻量、快速，适合高频轮询。
        */
       refreshSnapshots: async () => {
-        const { watchlist } = get();
+        const { watchlist, refreshing } = get();
         if (!watchlist.length) return;
+        if (refreshing) return;
+
+        set({ refreshing: true });
 
         try {
-          const snapshots = await fetchRealtimeSnapshots(watchlist);
+          const snapshots: RealtimeSnapshot[] = [];
+          for (const batch of chunkItems(watchlist, SNAPSHOT_BATCH_SIZE)) {
+            snapshots.push(...(await fetchRealtimeSnapshots(batch)));
+          }
+
           set((state) => ({
             quotesBySecid: mergeSnapshotsIntoQuotes(
               state.watchlist,
@@ -292,6 +339,8 @@ export const useStockStore = create<StockStoreState>()(
           }));
         } catch (error) {
           console.error("[store] refreshSnapshots failed:", error);
+        } finally {
+          set({ refreshing: false });
         }
       },
     }),
