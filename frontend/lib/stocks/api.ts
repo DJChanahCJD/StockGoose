@@ -7,6 +7,7 @@ import type {
   StockSearchItem,
 } from "@shared/types";
 import { mutate } from "@/lib/utils/cache";
+import { retry } from "@/lib/utils";
 import { shouldUseProxy } from "./platform";
 import { API_URL } from "../api/config";
 
@@ -185,17 +186,33 @@ export async function fetchStockQuote(
 
 /**
  * 获取单个标的的历史累计涨跌幅。
+ * 优先走东方财富，失败后回退到腾讯 K 线。
  */
 export async function fetchStockHistory(
   secid: string,
   range: StockHistoryRange
 ): Promise<StockHistoryPoint[]> {
-  const url = new URL("/stocks/history", API_URL);
-  url.searchParams.set("secid", secid);
-  url.searchParams.set("range", range);
+  const cacheKey = `stocks:history:${secid}:${range}`;
+
   return mutate(
-    `stocks:history:${secid}:${range}`,
-    async () => readApiResponse<StockHistoryPoint[]>(await fetch(url)),
+    cacheKey,
+    async () => {
+      try {
+        return await retry(async () => {
+          const url = new URL("/stocks/history", API_URL);
+          url.searchParams.set("secid", secid);
+          url.searchParams.set("range", range);
+          return readApiResponse<StockHistoryPoint[]>(await fetch(url));
+        }, 2);
+      } catch {
+        return retry(async () => {
+          const url = new URL("/stocks/history-tencent", API_URL);
+          url.searchParams.set("secid", secid);
+          url.searchParams.set("range", range);
+          return readApiResponse<StockHistoryPoint[]>(await fetch(url));
+        }, 2);
+      }
+    },
     { revalidate: false }
   ).then((result) => result ?? []);
 }
@@ -231,7 +248,15 @@ const QT_MARKET_MAP: Record<string, string> = {
   "0": "sz",
   "1": "sh",
   "105": "us",
+  "106": "us",
   "116": "hk",
+};
+
+/** EastMoney 市场码 → 美股交易所后缀 */
+const US_MARKET_SUFFIX: Record<string, string> = {
+  "105": ".N", // NYSE
+  "106": ".OQ", // NASDAQ
+  "107": ".A", // AMEX
 };
 
 /** qt.gtimg.cn 前缀 → EastMoney 市场码 */
@@ -242,11 +267,31 @@ const QT_PREFIX_REVERSE: Record<string, string> = {
   us: "105",
 };
 
-/** EastMoney secid → qt.gtimg.cn 股票代码 (如 0.000858 → sz000858) */
+/**
+ * 根据美股代码和 EastMoney 市场码判断交易所后缀。
+ * 优先使用市场码映射，回退到代码位数启发式规则。
+ */
+function getUSSuffix(code: string, market: string): string {
+  const mapped = US_MARKET_SUFFIX[market];
+  if (mapped) return mapped;
+
+  // 回退：基于代码位数的启发式规则
+  // NASDAQ 股票通常 4-5 个字母，NYSE 通常 1-3 个字母
+  const baseCode = code.includes(".") ? code.split(".")[0] : code;
+  if (baseCode.length >= 4) return ".OQ";
+  return ".N";
+}
+
+/** EastMoney secid → qt.gtimg.cn 股票代码 (如 0.000858 → sz000858, 106.AAPL → usAAPL.OQ) */
 function toQtCode(secid: string): string | null {
   const [market, code] = secid.split(".");
   const prefix = QT_MARKET_MAP[market];
   if (!prefix || !code) return null;
+
+  if (prefix === "us") {
+    const suffix = getUSSuffix(code, market);
+    return `${prefix}${code}${suffix}`;
+  }
   return `${prefix}${code}`;
 }
 
@@ -262,14 +307,17 @@ function parseNum(val: string | undefined): number | null {
  * 响应格式: v_sz000858="51~五粮液~000858~27.78~..."
  */
 function parseRealtimeLine(line: string): RealtimeSnapshot | null {
-  const match = line.match(/^v_(\w+)="(.+)"\s*;?\s*$/);
+  const match = line.match(/^v_([\w.]+)="(.+)"\s*;?\s*$/);
   if (!match) return null;
 
   const qtCode = match[1];
   const fields = match[2].split("~");
   const qtPrefix = qtCode.match(/^[a-z]+/)?.[0] ?? "";
   const rawCode = fields[2];
-  const code = qtPrefix === "us" ? rawCode.replace(/\.[A-Z]+$/, "") : rawCode;
+  const code =
+    qtPrefix === "us"
+      ? rawCode.replace(/\.[A-Z]+$/, "") // 去除美股交易所后缀（如 AAPL.OQ → AAPL）
+      : rawCode;
   const name = fields[1];
   const market = QT_PREFIX_REVERSE[qtPrefix] ?? "";
   const price = parseNum(fields[3]);

@@ -29,6 +29,16 @@ export const SITE_RULES: SiteRule[] = [
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     },
   },
+  {
+    // 腾讯财经 K 线接口规则
+    match: (u) => u.hostname === "web.ifzq.gtimg.cn",
+    headers: {
+      Referer: "https://gu.qq.com/",
+      Accept: "application/json, */*",
+      "User-Agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    },
+  },
 ];
 
 /**

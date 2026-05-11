@@ -120,7 +120,15 @@ const MARKET_TO_QT_PREFIX: Record<string, string> = {
   "0": "sz",
   "1": "sh",
   "105": "us",
+  "106": "us",
   "116": "hk",
+};
+
+/** EastMoney 市场码 → 美股交易所后缀 */
+const US_MARKET_SUFFIX: Record<string, string> = {
+  "105": ".N", // NYSE
+  "106": ".OQ", // NASDAQ
+  "107": ".A", // AMEX
 };
 
 /** qt.gtimg.cn 前缀 → EastMoney 市场码 */
@@ -138,11 +146,31 @@ function parseNum(val: string | undefined): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
-/** EastMoney secid → qt.gtimg.cn 代码 (如 0.000858 → sz000858) */
+/**
+ * 根据美股代码和 EastMoney 市场码判断交易所后缀。
+ * 优先使用市场码映射，回退到代码位数启发式规则。
+ */
+function getUSSuffix(code: string, market: string): string {
+  const mapped = US_MARKET_SUFFIX[market];
+  if (mapped) return mapped;
+
+  // 回退：基于代码位数的启发式规则
+  // NASDAQ 股票通常 4-5 个字母，NYSE 通常 1-3 个字母
+  const baseCode = code.includes(".") ? code.split(".")[0] : code;
+  if (baseCode.length >= 4) return ".OQ";
+  return ".N";
+}
+
+/** EastMoney secid → qt.gtimg.cn 代码 (如 0.000858 → sz000858, 106.AAPL → usAAPL.OQ) */
 function toQtCode(secid: string): string | null {
   const [market, code] = secid.split(".");
   const prefix = MARKET_TO_QT_PREFIX[market];
   if (!prefix || !code) return null;
+
+  if (prefix === "us") {
+    const suffix = getUSSuffix(code, market);
+    return `${prefix}${code}${suffix}`;
+  }
   return `${prefix}${code}`;
 }
 
@@ -151,14 +179,17 @@ function toQtCode(secid: string): string | null {
  * 响应格式: v_sz000858="51~五粮液~000858~27.78~..."
  */
 function parseRealtimeLine(line: string): RealtimeSnapshot | null {
-  const match = line.match(/^v_(\w+)="(.+)"\s*;?\s*$/);
+  const match = line.match(/^v_([\w.]+)="(.+)"\s*;?\s*$/);
   if (!match) return null;
 
   const qtCode = match[1];
   const fields = match[2].split("~");
   const qtPrefix = qtCode.match(/^[a-z]+/)?.[0] ?? "";
   const rawCode = fields[2];
-  const code = qtPrefix === "us" ? rawCode.replace(/\.[A-Z]+$/, "") : rawCode;
+  const code =
+    qtPrefix === "us"
+      ? rawCode.replace(/\.[A-Z]+$/, "") // 去除美股交易所后缀（如 AAPL.OQ → AAPL）
+      : rawCode;
   const name = fields[1];
   const market = QT_PREFIX_TO_MARKET[qtPrefix] ?? "";
   const price = parseNum(fields[3]);
@@ -299,6 +330,7 @@ function getHistoryLimit(range: StockHistoryRange): number | null {
   if (range === "3y") return 1095;
   if (range === "5y") return 1825;
   if (range === "10y") return 3650;
+  if (range === "all") return 5000;
   return null;
 }
 
@@ -379,6 +411,77 @@ async function fetchHistoryData(
   const points = buildHistoryPoints(filterHistoryByRange(rawPoints, range));
   if (!points.length) {
     throw new Error("Eastmoney history returned empty data");
+  }
+
+  await putToCache(
+    cacheRequest,
+    new Response(JSON.stringify(points), {
+      headers: { "Content-Type": "application/json" },
+    }),
+    "stockHistory"
+  );
+
+  return points;
+}
+
+/** 腾讯 K 线日数据点 */
+type TencentKlinePoint = [string, string, string, string, string, string];
+
+/** 腾讯 K 线 API 响应 */
+type TencentKlineResponse = {
+  code?: number;
+  data?: Record<
+    string,
+    { qfqday?: TencentKlinePoint[]; day?: TencentKlinePoint[] }
+  >;
+};
+
+/**
+ * 从腾讯 ifzq 接口拉取日 K 历史数据。
+ * 作为东方财富 K 线不可用时的回退数据源。
+ */
+async function fetchHistoryFromTencent(
+  secid: string,
+  range: StockHistoryRange
+): Promise<StockHistoryPoint[]> {
+  const qtCode = toQtCode(secid);
+  if (!qtCode) throw new Error(`无法转换股票代码: ${secid}`);
+
+  const cacheRequest = new Request(
+    `https://stockgoose.local/stocks/history-tencent?secid=${encodeURIComponent(secid)}&range=${range}`
+  );
+  const cached = await getFromCache(cacheRequest);
+  if (cached) {
+    return (await cached.json()) as StockHistoryPoint[];
+  }
+
+  const limit = getHistoryLimit(range);
+  const url = new URL("http://web.ifzq.gtimg.cn/appstock/app/fqkline/get");
+  url.searchParams.set("param", `${qtCode},day,,,${limit ?? 5000},qfq`);
+
+  const response = await proxyGet(url.toString());
+  if (!response.ok) {
+    throw new Error(`腾讯 K 线响应异常: ${response.status}`);
+  }
+
+  const body = (await response.json()) as TencentKlineResponse;
+  const qtData = body.data?.[qtCode];
+  const dayData = qtData?.qfqday ?? qtData?.day;
+  if (!dayData?.length) {
+    throw new Error("腾讯 K 线返回空数据");
+  }
+
+  const rawPoints: RawHistoryPoint[] = [];
+  for (const entry of dayData) {
+    const date = entry[0];
+    const close = Number(entry[2]);
+    if (!date || !Number.isFinite(close)) continue;
+    rawPoints.push({ date, close });
+  }
+
+  const points = buildHistoryPoints(filterHistoryByRange(rawPoints, range));
+  if (!points.length) {
+    throw new Error("腾讯 K 线处理后无有效数据");
   }
 
   await putToCache(
@@ -503,10 +606,31 @@ stockRoutes.get("/history", zValidator("query", historySchema), async (c) => {
   try {
     return ok(c, await fetchHistoryData(secid, range));
   } catch (error) {
-    console.error("Stock history error:", error);
+    console.error(
+      `[history] EastMoney failed secid=${secid} range=${range}:`,
+      error
+    );
     return fail(c, "历史涨跌幅获取失败", 502);
   }
 });
+
+stockRoutes.get(
+  "/history-tencent",
+  zValidator("query", historySchema),
+  async (c) => {
+    const { secid, range } = c.req.valid("query");
+
+    try {
+      return ok(c, await fetchHistoryFromTencent(secid, range));
+    } catch (error) {
+      console.error(
+        `[history-tencent] Tencent K-line failed secid=${secid} range=${range}:`,
+        error
+      );
+      return fail(c, "腾讯历史涨跌幅获取失败", 502);
+    }
+  }
+);
 
 stockRoutes.get("/quotes", zValidator("query", quotesSchema), async (c) => {
   const { items } = c.req.valid("query");
