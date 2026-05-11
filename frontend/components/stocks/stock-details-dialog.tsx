@@ -6,7 +6,7 @@ import type {
   StockHistoryRange,
   StockQuote,
 } from "@shared/types";
-import { RefreshCw } from "lucide-react";
+import { ExternalLink, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
@@ -15,6 +15,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fetchStockHistory } from "@/lib/stocks/api";
+import {
+  generateExternalLinks,
+  type ExternalLink as ExternalLinkType,
+} from "@/lib/stocks/external-links";
 import { cn } from "@/lib/utils";
 import type { ColorMode } from "./stock-utils";
 import { formatNumber, formatUpdateTime, getQuoteTone } from "./stock-utils";
@@ -55,6 +59,11 @@ export function StockDetailsDialog({
     ? getQuoteTone(quote, colorMode)
     : { colorClass: "text-success" };
 
+  const externalLinks = useMemo<ExternalLinkType[]>(() => {
+    if (!quote) return [];
+    return generateExternalLinks(quote.code, quote.market);
+  }, [quote]);
+
   useEffect(() => {
     if (!quote) return;
     let cancelled = false;
@@ -86,43 +95,67 @@ export function StockDetailsDialog({
 
   return (
     <Dialog open={Boolean(quote)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-3xl">
         {quote && (
           <>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 {quote.name}
-                <Badge variant="secondary">{quote.code}</Badge>
+                <Badge variant="secondary" className="font-mono">
+                  {quote.code}
+                </Badge>
               </DialogTitle>
             </DialogHeader>
 
-            <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="flex flex-col gap-3">
               <div>
-                <div className="text-xs text-muted-foreground">当前价</div>
+                {/* 优化点：更新时间与“当前价”融合在同一行 */}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <span>当前价</span>
+                  <span className="h-3 w-px bg-border/80"></span>
+                  <span className="font-mono text-xs tracking-tight opacity-70 sm:text-xs">
+                    {formatUpdateTime(quote.updatedAt)}
+                  </span>
+                </div>
+
                 <div className="mt-1 flex items-baseline gap-3">
-                  <span className="font-mono text-3xl font-semibold">
+                  <span className="font-mono text-3xl font-semibold sm:text-4xl">
                     {formatNumber(quote.price, 2)}
                   </span>
                   <span
-                    className={cn("font-mono text-sm font-medium", colorClass)}
+                    className={cn(
+                      "font-mono text-sm font-medium sm:text-base",
+                      colorClass
+                    )}
                   >
                     {quote.changePercent === null
                       ? "--"
                       : `${quote.changePercent >= 0 ? "+" : ""}${quote.changePercent}%`}
                   </span>
                 </div>
-              </div>
-              <div className="text-right text-xs text-muted-foreground ml-auto">
-                <div>市场代码：{quote.marketName || quote.market}</div>
-                <div className="mt-1">
-                  更新时间：{formatUpdateTime(quote.updatedAt)}
-                </div>
+
+                {externalLinks.length > 0 && (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+                    {externalLinks.map((link) => (
+                      <a
+                        key={link.name}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-0.5 text-xs text-primary transition-colors hover:text-primary/80"
+                      >
+                        {link.name}
+                        <ExternalLink className="size-3" />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="min-h-[300px] rounded-xl border border-border bg-card p-4">
+            <div className="rounded-xl border border-border bg-card p-3 shadow-sm sm:p-4">
               {loading ? (
-                <div className="flex h-[260px] items-center justify-center text-sm text-muted-foreground">
+                <div className="flex h-[160px] items-center justify-center text-sm text-muted-foreground sm:h-[224px]">
                   加载历史走势中...
                 </div>
               ) : error ? (
@@ -138,25 +171,24 @@ export function StockDetailsDialog({
                   onRetry={() => setReloadKey((current) => current + 1)}
                 />
               )}
-              <div className="mt-4 -mx-4 -mb-4 px-4 pb-4 pt-2 bg-muted/30 border-t border-border">
-                <div className="overflow-x-auto">
-                  <div className="flex gap-1 rounded-lg bg-muted p-1 min-w-max">
-                    {RANGE_OPTIONS.map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() => setRange(item.value)}
-                        className={cn(
-                          "flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
-                          range === item.value
-                            ? "bg-background text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground"
-                        )}
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
+
+              <div className="mt-3 -mx-3 -mb-3 border-t border-border bg-muted/30 px-3 pb-3 pt-2 sm:-mx-4 sm:-mb-4 sm:px-4 sm:pb-4">
+                <div className="flex w-full gap-1 overflow-x-auto rounded-lg bg-muted p-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                  {RANGE_OPTIONS.map((item) => (
+                    <button
+                      key={item.value}
+                      type="button"
+                      onClick={() => setRange(item.value)}
+                      className={cn(
+                        "flex-shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition-all sm:flex-1",
+                        range === item.value
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+                      )}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
                 </div>
               </div>
             </div>
@@ -175,12 +207,12 @@ function HistoryError({
   onRetry: () => void;
 }) {
   return (
-    <div className="flex h-[260px] flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+    <div className="flex h-[160px] flex-col items-center justify-center gap-3 text-sm text-muted-foreground sm:h-[224px]">
       <div>{message}</div>
       <button
         type="button"
         onClick={onRetry}
-        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-accent"
+        className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-accent"
       >
         <RefreshCw className="h-3.5 w-3.5" />
         重试
@@ -234,21 +266,24 @@ function HistoryChart({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <div className="text-xs text-muted-foreground font-medium">
+          <div className="text-xs font-medium text-muted-foreground">
             {active.date}
           </div>
           <div
-            className={cn("mt-1 font-mono text-2xl font-bold", toneTextClass)}
+            className={cn(
+              "mt-1 font-mono text-xl font-bold sm:text-2xl",
+              toneTextClass
+            )}
           >
             {isUp ? "+" : ""}
             {active.changePercent.toFixed(2)}%
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xs text-muted-foreground font-medium">
+          <div className="text-xs font-medium text-muted-foreground">
             收盘价
           </div>
           <div className="mt-1 font-mono text-base font-semibold">
@@ -258,7 +293,7 @@ function HistoryChart({
       </div>
 
       <div
-        className="relative h-56 w-full cursor-crosshair touch-none"
+        className="relative h-40 w-full cursor-crosshair touch-none sm:h-56"
         onPointerMove={handlePointerMove}
         onPointerLeave={() => setHoverIndex(null)}
       >

@@ -273,7 +273,13 @@ export default function HomePage() {
           viewMode={viewMode}
           onViewModeChange={setViewMode}
           alerts={alerts}
-          onOpenAddDialog={() => setIsAddDialogOpen(true)}
+          onOpenAddDialog={() => {
+            // 如果过滤框有内容，预填到全局搜索框
+            if (watchlistFilterTerm.trim()) {
+              setSearchTerm(watchlistFilterTerm.trim());
+            }
+            setIsAddDialogOpen(true);
+          }}
           onOpenAlertDialog={setAlertDialogQuote}
           onOpenDetailsDialog={setDetailsDialogQuote}
           onOpenDeleteDialog={setDeleteDialogQuote}
