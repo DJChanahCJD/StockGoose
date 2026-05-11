@@ -3,6 +3,8 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import type {
   RealtimeSnapshot,
+  StockHistoryPoint,
+  StockHistoryRange,
   StockQuote,
   StockSearchItem,
   StockTrendPoint,
@@ -34,9 +36,23 @@ type TrendsApiResponse = {
   data?: TrendsApiData;
 };
 
+type KlineApiData = {
+  klines?: string[];
+};
+
+type KlineApiResponse = {
+  rc?: number;
+  data?: KlineApiData;
+};
+
 type QuoteFetchResult = {
   secid: string;
   quote: StockQuote | null;
+};
+
+type RawHistoryPoint = {
+  date: string;
+  close: number;
 };
 
 export const stockRoutes = new Hono<{ Bindings: Env }>();
@@ -51,6 +67,14 @@ const trendsSchema = z.object({
     .trim()
     .regex(/^\d+\.[A-Za-z0-9]+$/),
   days: z.coerce.number().int().min(1).max(5).default(1),
+});
+
+const historySchema = z.object({
+  secid: z
+    .string()
+    .trim()
+    .regex(/^\d+\.[A-Za-z0-9]+$/),
+  range: z.enum(["1m", "3m", "6m", "1y", "all"]).default("1m"),
 });
 
 const quotesSchema = z.object({
@@ -237,6 +261,130 @@ async function fetchTrendData(
 }
 
 /**
+ * 根据区间筛选历史日 K 数据。
+ */
+function filterHistoryByRange(
+  points: RawHistoryPoint[],
+  range: StockHistoryRange
+): RawHistoryPoint[] {
+  if (range === "all" || points.length === 0) return points;
+
+  const last = points.at(-1);
+  if (!last) return points;
+
+  const cutoff = new Date(`${last.date}T00:00:00`);
+  if (Number.isNaN(cutoff.getTime())) return points;
+
+  if (range === "1m") cutoff.setMonth(cutoff.getMonth() - 1);
+  if (range === "3m") cutoff.setMonth(cutoff.getMonth() - 3);
+  if (range === "6m") cutoff.setMonth(cutoff.getMonth() - 6);
+  if (range === "1y") cutoff.setFullYear(cutoff.getFullYear() - 1);
+
+  return points.filter((point) => new Date(`${point.date}T00:00:00`) >= cutoff);
+}
+
+/**
+ * 将历史范围转换成 EastMoney K 线请求条数。
+ */
+function getHistoryLimit(range: StockHistoryRange): number | null {
+  if (range === "1m") return 31;
+  if (range === "3m") return 93;
+  if (range === "6m") return 186;
+  if (range === "1y") return 366;
+  return null;
+}
+
+/**
+ * 解析 EastMoney 日 K 字符串中的日期和收盘价。
+ */
+function parseKline(line: string): RawHistoryPoint | null {
+  const [date, , close] = line.split(",");
+  const parsedClose = Number(close);
+  if (!date || !Number.isFinite(parsedClose)) return null;
+
+  return {
+    date,
+    close: parsedClose,
+  };
+}
+
+/**
+ * 将历史收盘价转换为区间累计涨跌幅。
+ */
+function buildHistoryPoints(points: RawHistoryPoint[]): StockHistoryPoint[] {
+  const base = points.find((point) => point.close > 0)?.close;
+  if (!base) return [];
+
+  return points.map((point) => ({
+    date: point.date,
+    close: Number(point.close.toFixed(3)),
+    changePercent: Number(((point.close / base - 1) * 100).toFixed(2)),
+  }));
+}
+
+/**
+ * 拉取并归一化 EastMoney 日 K 历史数据。
+ */
+async function fetchHistoryData(
+  secid: string,
+  range: StockHistoryRange
+): Promise<StockHistoryPoint[]> {
+  const cacheRequest = new Request(
+    `https://stockgoose.local/stocks/history-v2?secid=${encodeURIComponent(secid)}&range=${range}`
+  );
+  const cached = await getFromCache(cacheRequest);
+  if (cached) {
+    return (await cached.json()) as StockHistoryPoint[];
+  }
+
+  const url = new URL("https://push2his.eastmoney.com/api/qt/stock/kline/get");
+  url.searchParams.set("secid", secid);
+  url.searchParams.set("fields1", "f1,f2,f3,f4,f5,f6");
+  url.searchParams.set(
+    "fields2",
+    "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
+  );
+  url.searchParams.set("klt", "101");
+  url.searchParams.set("fqt", "1");
+  url.searchParams.set("end", "20500101");
+
+  const limit = getHistoryLimit(range);
+  if (limit) {
+    url.searchParams.set("lmt", String(limit));
+  } else {
+    url.searchParams.set("beg", "0");
+  }
+
+  const response = await proxyGet(url.toString());
+  if (!response.ok) {
+    throw new Error(`Eastmoney history responded with ${response.status}`);
+  }
+
+  const body = (await response.json()) as KlineApiResponse;
+  if (body.rc !== 0 || !body.data?.klines) {
+    throw new Error("Eastmoney returned an invalid kline payload");
+  }
+
+  const rawPoints = body.data.klines
+    .map(parseKline)
+    .filter((point): point is RawHistoryPoint => Boolean(point));
+  const points = buildHistoryPoints(filterHistoryByRange(rawPoints, range));
+  if (!points.length) {
+    throw new Error("Eastmoney history returned empty data");
+  }
+
+  await putToCache(
+    cacheRequest,
+    new Response(JSON.stringify(points), {
+      headers: { "Content-Type": "application/json" },
+    }),
+    "stockHistory"
+  );
+
+  return points;
+}
+
+/**
  * 小并发抓取自选行情，降低上游瞬时压力。
  */
 async function fetchQuotesWithLimit(
@@ -338,6 +486,17 @@ stockRoutes.get("/trends", zValidator("query", trendsSchema), async (c) => {
   } catch (error) {
     console.error("Stock trends error:", error);
     return fail(c, "分时行情获取失败", 502);
+  }
+});
+
+stockRoutes.get("/history", zValidator("query", historySchema), async (c) => {
+  const { secid, range } = c.req.valid("query");
+
+  try {
+    return ok(c, await fetchHistoryData(secid, range));
+  } catch (error) {
+    console.error("Stock history error:", error);
+    return fail(c, "历史涨跌幅获取失败", 502);
   }
 });
 

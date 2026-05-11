@@ -24,6 +24,7 @@ type StockStoreState = {
   setColorMode: (mode: ColorMode) => void;
   addToWatchlist: (item: StockSearchItem) => void;
   removeFromWatchlist: (secid: string) => void;
+  reorderWatchlist: (nextWatchlist: string[]) => void;
   addAlert: (rule: AlertRule) => void;
   removeAlert: (id: string) => void;
   refreshQuotes: () => Promise<void>;
@@ -188,6 +189,20 @@ export const useStockStore = create<StockStoreState>()(
           quotesBySecid: nextQuotes,
           alerts: state.alerts.filter((item) => item.secid !== secid),
         }));
+      },
+
+      /**
+       * 按拖拽结果重排自选列表，仅接受成员完全一致的新顺序。
+       */
+      reorderWatchlist: (nextWatchlist) => {
+        const { watchlist } = get();
+        const sameLength = nextWatchlist.length === watchlist.length;
+        const sameMembers = watchlist.every((secid) =>
+          nextWatchlist.includes(secid)
+        );
+        if (!sameLength || !sameMembers) return;
+
+        set({ watchlist: nextWatchlist });
       },
 
       /**

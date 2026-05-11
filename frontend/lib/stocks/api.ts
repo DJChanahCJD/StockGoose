@@ -1,6 +1,8 @@
 import type {
   ApiResponse,
   RealtimeSnapshot,
+  StockHistoryPoint,
+  StockHistoryRange,
   StockQuote,
   StockSearchItem,
 } from "@shared/types";
@@ -179,6 +181,23 @@ export async function fetchStockQuote(
   url.searchParams.set("secid", secid);
   url.searchParams.set("days", String(days));
   return readApiResponse<StockQuote>(await fetch(url));
+}
+
+/**
+ * 获取单个标的的历史累计涨跌幅。
+ */
+export async function fetchStockHistory(
+  secid: string,
+  range: StockHistoryRange
+): Promise<StockHistoryPoint[]> {
+  const url = new URL("/stocks/history", API_URL);
+  url.searchParams.set("secid", secid);
+  url.searchParams.set("range", range);
+  return mutate(
+    `stocks:history:${secid}:${range}`,
+    async () => readApiResponse<StockHistoryPoint[]>(await fetch(url)),
+    { revalidate: false }
+  ).then((result) => result ?? []);
 }
 
 /**

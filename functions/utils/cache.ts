@@ -10,6 +10,9 @@ export const CACHE_CONFIG = {
   stockRealtime: {
     maxAge: 5, // 5 秒，实时快照刷新更快
   },
+  stockHistory: {
+    maxAge: 3600, // 1 小时，历史日 K 更新频率较低
+  },
 };
 
 const cacheName = "stockgoose-cache";

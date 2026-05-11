@@ -26,6 +26,14 @@ export type StockTrendPoint = {
   average: number;
 };
 
+export type StockHistoryRange = "1m" | "3m" | "6m" | "1y" | "all";
+
+export type StockHistoryPoint = {
+  date: string;
+  close: number;
+  changePercent: number;
+};
+
 export type StockQuote = StockIdentity & {
   secid: string;
   price: number | null;
