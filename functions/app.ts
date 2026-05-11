@@ -1,6 +1,4 @@
 import { corsMiddleware } from "./middleware/cors";
-import { authRoutes } from "./routes/auth";
-import { dbRoutes } from "./routes/db";
 import { proxyRoutes } from "./routes/proxy";
 import { stockRoutes } from "./routes/stocks";
 
@@ -13,12 +11,6 @@ export const app = new Hono<{
 
 // Global Middleware
 app.use("*", corsMiddleware);
-
-// Routes
-app.route("/auth", authRoutes);
-
-app.route("/db", dbRoutes);
-
 app.route("/proxy", proxyRoutes);
 
 app.route("/stocks", stockRoutes);
