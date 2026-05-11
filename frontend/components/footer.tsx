@@ -10,7 +10,7 @@ export function Footer() {
         className="flex items-center gap-2"
       >
         <Github className="h-5 w-5" />
-        <span className="text-sm">Vibe Template CF</span>
+        <span className="text-sm">StockGoose</span>
       </a>
     </footer>
   );

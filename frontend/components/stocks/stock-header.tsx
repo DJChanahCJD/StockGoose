@@ -1,20 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ChangeEvent } from "react";
 import {
+  Database,
+  FileInput,
+  FileOutput,
   Moon,
   Palette,
   Search,
   Settings2,
-  Square,
   Sun,
-  TrendingDown,
   TrendingUp,
   X,
 } from "lucide-react";
 import { GooseLogo } from "@/components/logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Drawer,
   DrawerContent,
@@ -32,6 +39,8 @@ type StockHeaderProps = {
   onFilterChange: (value: string) => void;
   colorMode: ColorMode;
   onColorModeChange: (mode: ColorMode) => void;
+  onExportData: () => void;
+  onImportData: (file: File) => void;
 };
 
 /**
@@ -42,6 +51,8 @@ export function StockHeader({
   onFilterChange,
   colorMode,
   onColorModeChange,
+  onExportData,
+  onImportData,
 }: StockHeaderProps) {
   const isMobile = useIsMobile();
   const { theme, setTheme } = useTheme();
@@ -56,17 +67,33 @@ export function StockHeader({
   }
 
   /**
+   * 打开指定的隐藏文件选择器。
+   */
+  function openImportPicker(inputId: string): void {
+    document.getElementById(inputId)?.click();
+  }
+
+  /**
+   * 将文件选择结果传给页面层处理，并清空 input 以支持重复导入同一文件。
+   */
+  function handleImportFile(event: ChangeEvent<HTMLInputElement>): void {
+    const file = event.target.files?.[0];
+    if (file) onImportData(file);
+    event.target.value = "";
+  }
+
+  /**
    * 渲染股票名称与代码筛选输入框。
    */
   function renderSearchInput(className = "") {
     return (
       <div className={`relative group ${className}`}>
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <input
           value={filterTerm}
           onChange={(event) => onFilterChange(event.target.value)}
           placeholder="搜索自选代码或名称..."
-          className="w-full bg-background border border-input rounded-full py-1.5 pl-9 pr-8 text-xs focus:outline-none focus:ring-1 focus:ring-ring transition-all placeholder:text-muted-foreground text-foreground"
+          className="w-full bg-background border border-input rounded-lg py-1.5 pl-9 pr-8 text-xs focus:outline-none focus:ring-1 focus:ring-ring transition-all placeholder:text-muted-foreground text-foreground"
           autoFocus={isMobile}
         />
         {(filterTerm || isMobile) && (
@@ -80,6 +107,53 @@ export function StockHeader({
           </button>
         )}
       </div>
+    );
+  }
+
+  /**
+   * 渲染隐藏的备份文件选择器。
+   */
+  function renderImportInput(id: string) {
+    return (
+      <input
+        id={id}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={handleImportFile}
+      />
+    );
+  }
+
+  /**
+   * 渲染桌面端数据导入导出菜单。
+   */
+  function renderDesktopDataMenu() {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="hidden md:inline-flex p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+            title="数据导入导出"
+            aria-label="数据导入导出"
+          >
+            <Database className="w-4 h-4" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <label htmlFor="stock-data-import" className="cursor-pointer">
+              <FileInput className="h-4 w-4" />
+              导入备份
+            </label>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={onExportData}>
+            <FileOutput className="h-4 w-4" />
+            导出备份
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   }
 
@@ -104,6 +178,34 @@ export function StockHeader({
             <DrawerTitle className="text-sm">显示设置</DrawerTitle>
           </DrawerHeader>
           <div className="px-4 pb-5 space-y-4">
+            <div className="space-y-2">
+              <div className="text-xs font-medium text-muted-foreground">
+                数据
+              </div>
+              <ToggleGroup
+                type="single"
+                size="sm"
+                className="grid w-full grid-cols-2 rounded-lg border border-border bg-background"
+              >
+                <ToggleGroupItem
+                  value="import"
+                  aria-label="导入备份"
+                  onClick={() => openImportPicker("stock-data-import-mobile")}
+                >
+                  <FileInput className="h-4 w-4" />
+                  导入
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                  value="export"
+                  aria-label="导出备份"
+                  onClick={onExportData}
+                >
+                  <FileOutput className="h-4 w-4" />
+                  导出
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
+
             <div className="space-y-2">
               <div className="text-xs font-medium text-muted-foreground">
                 涨跌颜色
@@ -169,9 +271,12 @@ export function StockHeader({
       data-tauri-drag-region
     >
       <div className="max-w-7xl mx-auto w-full min-h-14 px-6 flex items-center justify-between gap-3 pointer-events-none">
-        <div className="flex items-center gap-3 text-foreground">
+        <div
+          className="flex items-center gap-3 text-foreground cursor-pointer"
+          onClick={() => window.location.reload()}
+        >
           <GooseLogo className="w-5 h-5" />
-          <span className="font-bold tracking-tight text-sm">StockGoose</span>
+          <h1 className="font-bold tracking-tight text-md">StockGoose</h1>
         </div>
 
         <div className="flex items-center gap-2 pointer-events-auto">
@@ -188,6 +293,8 @@ export function StockHeader({
           ) : (
             renderSearchInput("w-64")
           )}
+
+          {renderDesktopDataMenu()}
 
           <button
             type="button"
@@ -207,6 +314,8 @@ export function StockHeader({
           <div className="md:hidden">{renderMobileSettings()}</div>
         </div>
       </div>
+      {renderImportInput("stock-data-import")}
+      {renderImportInput("stock-data-import-mobile")}
       {isMobile && mobileSearchOpen && (
         <div className="px-6 pb-3 pointer-events-auto">
           {renderSearchInput("w-full")}

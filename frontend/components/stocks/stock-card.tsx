@@ -161,10 +161,10 @@ export function StockCard({
               </div>
             </div>
 
-            <div className="mt-4 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            {/* <div className="mt-4 flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
               <Clock3 className="w-3 h-3" />
               <span>{formatUpdateTime(quote.updatedAt)}</span>
-            </div>
+            </div> */}
 
             <button
               ref={setActivatorNodeRef}

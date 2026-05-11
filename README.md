@@ -16,12 +16,10 @@
 
 ## 功能
 
-- 自选股管理（添加、右键/长按菜单、拖拽排序、删除确认）
-- 实时行情展示（价格、涨跌幅、走势图）
-- 价格提醒规则
-- 自适应涨跌颜色（US 绿涨红跌 / CN 红涨绿跌）
-- 暗色模式
-- 行情数据自动刷新
+- 自选标的管理（添加、右键/长按菜单、拖拽排序、删除确认）
+- 实时行情展示（价格、涨跌幅、走势图）、价格提醒规则
+- 日夜模式 / 涨跌颜色切换 / 网格视图 / 列表视图
+- 数据导入导出
 
 ## 技术栈
 
@@ -44,15 +42,15 @@ npm run dev
 - 前端：`http://localhost:3000`
 - 后端：`http://localhost:8788` (由 Wrangler 代理)
 
-> 开发环境密码为 `123456`（访问 `/admin` 时需要）。
+> 后端当前仅负责代理 Web 端 API 请求
 
 ## 部署
 
-1. 在 Cloudflare Dashboard 创建 Pages 项目
+1. 在 Cloudflare Dashboard 创建 **Pages** 项目
 2. 构建命令：`npm run build`，输出目录：`frontend/out`
-3. 设置环境变量 `PASSWORD`
-4. 创建 D1 数据库并绑定到 Pages 项目（变量名 `DB`）
-5. 重新部署
+3. 点击部署
+
+> 注意：不要部署成 Workers 项目
 
 ## 项目结构
 
@@ -70,12 +68,29 @@ npm run dev
 └── .husky/            # Git hooks（typecheck + lint-staged）
 ```
 
+## 数据来源
+
+本项目使用了以下 API 接口：
+
+| 数据类型      | 接口地址                                                                    |
+| ------------- | --------------------------------------------------------------------------- |
+| 股票/基金搜索 | `https://base.itab.link/stock/search?name={q}`                              |
+| 实时行情      | `http://qt.gtimg.cn/q={code1},{code2}...`                                   |
+| 分时趋势      | `https://push2.eastmoney.com/api/qt/stock/trends2/get?secid={market.code}`  |
+| 历史 K 线     | `https://push2his.eastmoney.com/api/qt/stock/kline/get?secid={market.code}` |
+
+> ⚠️ 免责声明：以上接口均为第三方接口，随时可能变动或失效。本项目仅供学习交流，不构成投资建议。
+
 ## TODO
 
-- [ ] 评估 API 稳定性，如何避免限流
 - [x] 支持拖拽管理标的卡片
 - [x] 支持筛选功能、列表模式(参考小米负一屏的股票widget卡片)
 - [x] 实现 Web 端规则提醒调度器与通知适配器
-- [ ] 接入 Tauri 桌面端/移动端原生提醒适配器
 - [x] 提供历史涨跌幅浏览功能，hover 时显示日期、累计涨跌幅和收盘价
+- [x] 支持数据导入导出，方便迁移或备份
+
+### Low Priority
+
+- [ ] 清理冗余后端代码
+- [ ] 接入 Tauri 桌面端/移动端原生提醒适配器
 - [ ] 评估是否应该接入 KV 存储

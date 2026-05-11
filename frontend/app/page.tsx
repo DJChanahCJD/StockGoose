@@ -14,10 +14,16 @@ import {
   WatchlistGrid,
   type AlertDraft,
 } from "@/components/stocks";
+import { Footer } from "@/components/footer";
 import { AlertScheduler } from "@/lib/stocks/alert-scheduler";
 import { searchStocks } from "@/lib/stocks/api";
+import {
+  createStockBackup,
+  getStockBackupFileName,
+  parseStockBackup,
+  serializeStockBackup,
+} from "@/lib/stocks/backup";
 import { createNotifier } from "@/lib/stocks/notifier";
-import { getRuntimePlatform } from "@/lib/stocks/platform";
 import { toSecid, useStockStore } from "@/stores";
 
 /**
@@ -61,6 +67,8 @@ export default function HomePage() {
     reorderWatchlist,
     addAlert: addAlertRule,
     removeAlert: removeAlertRule,
+    exportUserData,
+    importUserData,
     refreshQuotes,
     refreshQuotesFor,
     refreshSnapshots,
@@ -199,6 +207,36 @@ export default function HomePage() {
     setDeleteDialogQuote(null);
   }
 
+  /**
+   * 将当前用户数据保存为本地 JSON 备份文件。
+   */
+  function handleExportData(): void {
+    const content = serializeStockBackup(createStockBackup(exportUserData()));
+    const blob = new Blob([content], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = getStockBackupFileName();
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success("备份已导出");
+  }
+
+  /**
+   * 读取本地 JSON 备份并覆盖导入用户数据。
+   */
+  async function handleImportData(file: File): Promise<void> {
+    try {
+      const payload = JSON.parse(await file.text()) as unknown;
+      importUserData(parseStockBackup(payload));
+      await refreshQuotes();
+      toast.success("备份已导入");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "备份导入失败");
+    }
+  }
+
   const visibleStocks = useMemo(() => {
     const query = watchlistFilterTerm.toLowerCase();
     return watchlist
@@ -219,26 +257,34 @@ export default function HomePage() {
         onFilterChange={setWatchlistFilterTerm}
         colorMode={colorMode}
         onColorModeChange={setColorMode}
+        onExportData={handleExportData}
+        onImportData={(file) => void handleImportData(file)}
       />
 
-      <WatchlistGrid
-        loading={loading}
-        visibleStocks={visibleStocks}
-        watchlist={watchlist}
-        filterTerm={watchlistFilterTerm}
-        colorMode={colorMode}
-        marketFilter={marketFilter}
-        onMarketFilterChange={setMarketFilter}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        alerts={alerts}
-        onOpenAddDialog={() => setIsAddDialogOpen(true)}
-        onOpenAlertDialog={setAlertDialogQuote}
-        onOpenDetailsDialog={setDetailsDialogQuote}
-        onOpenDeleteDialog={setDeleteDialogQuote}
-        onVisibleSecidsChange={handleVisibleSecidsChange}
-        onReorderWatchlist={reorderWatchlist}
-      />
+      <div className="flex-1 overflow-auto">
+        <WatchlistGrid
+          loading={loading}
+          visibleStocks={visibleStocks}
+          watchlist={watchlist}
+          filterTerm={watchlistFilterTerm}
+          colorMode={colorMode}
+          marketFilter={marketFilter}
+          onMarketFilterChange={setMarketFilter}
+          viewMode={viewMode}
+          onViewModeChange={setViewMode}
+          alerts={alerts}
+          onOpenAddDialog={() => setIsAddDialogOpen(true)}
+          onOpenAlertDialog={setAlertDialogQuote}
+          onOpenDetailsDialog={setDetailsDialogQuote}
+          onOpenDeleteDialog={setDeleteDialogQuote}
+          onVisibleSecidsChange={handleVisibleSecidsChange}
+          onReorderWatchlist={reorderWatchlist}
+        />
+        <div className="px-4 py-2 text-center text-xs text-muted-foreground">
+          共 {visibleStocks.length} 个标的
+        </div>
+        <Footer />
+      </div>
 
       <NotificationStack notifications={notifications} />
 

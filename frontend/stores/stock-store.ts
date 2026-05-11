@@ -7,6 +7,7 @@ import type {
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { fetchRealtimeSnapshots, fetchStockQuotes } from "@/lib/stocks/api";
+import type { StockGooseBackupData } from "@/lib/stocks/backup";
 import type {
   MarketFilter,
   StockViewMode,
@@ -38,6 +39,8 @@ type StockStoreState = {
   reorderWatchlist: (nextWatchlist: string[]) => void;
   addAlert: (rule: AlertRule) => void;
   removeAlert: (id: string) => void;
+  exportUserData: () => StockGooseBackupData;
+  importUserData: (data: StockGooseBackupData) => void;
   refreshQuotes: () => Promise<void>;
   refreshQuotesFor: (secids: string[]) => Promise<void>;
   refreshSnapshots: () => Promise<void>;
@@ -250,6 +253,31 @@ export const useStockStore = create<StockStoreState>()(
         set((state) => ({
           alerts: state.alerts.filter((item) => item.id !== id),
         }));
+      },
+
+      /**
+       * 导出用户可迁移数据，不包含行情缓存。
+       */
+      exportUserData: () => {
+        const { watchlist, alerts, colorMode } = get();
+        return {
+          watchlist,
+          alerts,
+          colorMode,
+        };
+      },
+
+      /**
+       * 覆盖导入用户可迁移数据，并重建自选占位行情。
+       */
+      importUserData: (data) => {
+        set({
+          watchlist: data.watchlist,
+          quotesBySecid: ensureWatchlistQuotes(data.watchlist, {}),
+          alerts: data.alerts,
+          colorMode: data.colorMode,
+          lastRefreshAt: null,
+        });
       },
 
       /**

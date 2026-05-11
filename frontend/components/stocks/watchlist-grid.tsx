@@ -212,13 +212,13 @@ export function WatchlistGrid({
           >
             <SelectTrigger
               size="sm"
-              className="h-8 w-[92px] rounded-lg bg-background text-xs"
+              className="h-8 w-[80px] rounded-lg bg-background text-xs"
             >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">全部</SelectItem>
-              <SelectItem value="cn">A股</SelectItem>
+              <SelectItem value="cn">A 股</SelectItem>
               <SelectItem value="hk">港股</SelectItem>
               <SelectItem value="us">美股</SelectItem>
               <SelectItem value="other">其他</SelectItem>
@@ -266,7 +266,7 @@ export function WatchlistGrid({
   function renderLoading() {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-        <div className="w-6 h-6 border-2 border-muted border-t-foreground rounded-full animate-spin mb-3" />
+        <div className="w-6 h-6 border-2 border-muted border-t-foreground rounded-lg animate-spin mb-3" />
         <p className="text-sm">加载行情中...</p>
       </div>
     );
@@ -281,7 +281,7 @@ export function WatchlistGrid({
         {filterTerm && (
           <button
             onClick={onOpenAddDialog}
-            className="mt-4 text-xs font-medium bg-secondary text-secondary-foreground px-4 py-2 rounded-full hover:bg-secondary/80 transition-colors"
+            className="mt-4 text-xs font-medium bg-secondary text-secondary-foreground px-4 py-2 rounded-lg hover:bg-secondary/80 transition-colors"
           >
             去全局搜索添加
           </button>
