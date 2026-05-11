@@ -7,6 +7,10 @@ import type {
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { fetchRealtimeSnapshots, fetchStockQuotes } from "@/lib/stocks/api";
+import type {
+  MarketFilter,
+  StockViewMode,
+} from "@/components/stocks/stock-utils";
 
 export const STOCK_STORE_KEY = "stockgoose_data";
 export const DEFAULT_WATCHLIST = ["105.AAPL", "116.01810", "1.000300"];
@@ -21,7 +25,11 @@ type StockStoreState = {
   refreshing: boolean;
   lastRefreshAt: string | null;
   colorMode: ColorMode;
+  marketFilter: MarketFilter;
+  viewMode: StockViewMode;
   setColorMode: (mode: ColorMode) => void;
+  setMarketFilter: (filter: MarketFilter) => void;
+  setViewMode: (mode: StockViewMode) => void;
   addToWatchlist: (item: StockSearchItem) => void;
   removeFromWatchlist: (secid: string) => void;
   reorderWatchlist: (nextWatchlist: string[]) => void;
@@ -147,8 +155,12 @@ export const useStockStore = create<StockStoreState>()(
       refreshing: false,
       lastRefreshAt: null,
       colorMode: "us" as ColorMode,
+      marketFilter: "all",
+      viewMode: "card",
 
       setColorMode: (mode) => set({ colorMode: mode }),
+      setMarketFilter: (filter) => set({ marketFilter: filter }),
+      setViewMode: (mode) => set({ viewMode: mode }),
 
       /**
        * 添加标的到自选，并立即生成可展示的占位卡片。

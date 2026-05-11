@@ -8,8 +8,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ALERT_LABELS, ALERT_OPTIONS } from "@/lib/stocks/alert-rules";
 import type { AlertDraft } from "./stock-utils";
-import { ALERT_LABELS, ALERT_OPTIONS, formatNumber } from "./stock-utils";
+import { formatNumber } from "./stock-utils";
 
 type AlertRulesDialogProps = {
   quote: StockQuote | null;

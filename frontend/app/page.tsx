@@ -1,22 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { StockQuote, StockSearchItem } from "@shared/types";
 import { toast } from "sonner";
 import {
   AddStockDialog,
   AlertRulesDialog,
   DeleteStockDialog,
-  getDisplayName,
-  isAlertTriggered,
+  matchesMarketFilter,
   NotificationStack,
   StockDetailsDialog,
   StockHeader,
   WatchlistGrid,
   type AlertDraft,
-  ALERT_LABELS,
 } from "@/components/stocks";
+import { AlertScheduler } from "@/lib/stocks/alert-scheduler";
 import { searchStocks } from "@/lib/stocks/api";
+import { createNotifier } from "@/lib/stocks/notifier";
 import { getRuntimePlatform } from "@/lib/stocks/platform";
 import { toSecid, useStockStore } from "@/stores";
 
@@ -53,7 +53,11 @@ export default function HomePage() {
     loading,
     lastRefreshAt,
     colorMode,
+    marketFilter,
+    viewMode,
     setColorMode,
+    setMarketFilter,
+    setViewMode,
     addToWatchlist: addStockToWatchlist,
     removeFromWatchlist: removeStockFromWatchlist,
     reorderWatchlist,
@@ -66,7 +70,7 @@ export default function HomePage() {
   /**
    * 添加一个自动消失的本地提醒通知。
    */
-  function pushNotification(message: string): void {
+  const pushNotification = useCallback((message: string): void => {
     const id = Date.now() + Math.floor(Math.random() * 1000);
     setNotifications((current) => [...current, { id, message }]);
     window.setTimeout(
@@ -74,7 +78,9 @@ export default function HomePage() {
         setNotifications((current) => current.filter((item) => item.id !== id)),
       5000
     );
-  }
+  }, []);
+
+  const notifier = useMemo(() => createNotifier("web"), []);
 
   useEffect(() => {
     setRuntimeLabel(getRuntimePlatform() === "web" ? "网页代理" : "运行时直连");
@@ -82,9 +88,11 @@ export default function HomePage() {
 
   useEffect(() => {
     let cancelled = false;
+    let scheduler: AlertScheduler | null = null;
 
     /**
-     * 首次进入页面时加载完整行情。
+     * 首次进入页面时加载完整行情，完成后启动提醒调度器。
+     * 合并为单个 effect 避免 mount 时 refreshQuotes + refreshSnapshots 双重加载。
      */
     async function initialLoad(): Promise<void> {
       try {
@@ -94,22 +102,25 @@ export default function HomePage() {
           toast.error(error instanceof Error ? error.message : "行情加载失败");
         }
       }
-    }
 
-    /**
-     * 后续使用轻量实时快照刷新价格字段。
-     */
-    async function periodicRefresh(): Promise<void> {
-      await refreshSnapshots();
+      if (cancelled) return;
+
+      scheduler = new AlertScheduler({
+        getAlerts: () => useStockStore.getState().alerts,
+        getQuotes: () => useStockStore.getState().quotesBySecid,
+        refresh: refreshSnapshots,
+        notifier,
+        onLocalNotify: pushNotification,
+      });
+      scheduler.start();
     }
 
     initialLoad();
-    const timer = window.setInterval(periodicRefresh, 15000);
     return () => {
       cancelled = true;
-      window.clearInterval(timer);
+      scheduler?.stop();
     };
-  }, [refreshQuotes, refreshSnapshots]);
+  }, [notifier, pushNotification, refreshQuotes, refreshSnapshots]);
 
   useEffect(() => {
     if (!searchTerm.trim()) {
@@ -130,25 +141,6 @@ export default function HomePage() {
 
     return () => window.clearTimeout(timer);
   }, [searchTerm]);
-
-  useEffect(() => {
-    const quotes = watchlist
-      .map((secid) => quotesBySecid[secid])
-      .filter((quote): quote is StockQuote => Boolean(quote));
-    if (!quotes.length || !alerts.length) return;
-
-    for (const quote of quotes) {
-      for (const rule of alerts.filter((item) => item.secid === quote.secid)) {
-        if (isAlertTriggered(rule, quote)) {
-          pushNotification(
-            `${getDisplayName(quote)} ${ALERT_LABELS[rule.type]} ${
-              rule.threshold
-            }`
-          );
-        }
-      }
-    }
-  }, [watchlist, quotesBySecid, alerts]);
 
   /**
    * 将搜索结果加入自选列表。
@@ -171,6 +163,10 @@ export default function HomePage() {
     if (!Number.isFinite(threshold)) {
       toast.error("请输入有效阈值");
       return;
+    }
+
+    if (alerts.length === 0) {
+      void notifier.requestPermission();
     }
 
     addAlertRule({
@@ -205,16 +201,21 @@ export default function HomePage() {
       .filter((quote): quote is StockQuote => Boolean(quote))
       .filter(
         (quote) =>
-          quote.name.toLowerCase().includes(query) ||
-          quote.code.toLowerCase().includes(query)
+          matchesMarketFilter(quote, marketFilter) &&
+          (quote.name.toLowerCase().includes(query) ||
+            quote.code.toLowerCase().includes(query))
       );
-  }, [watchlist, quotesBySecid, watchlistFilterTerm]);
+  }, [watchlist, quotesBySecid, watchlistFilterTerm, marketFilter]);
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground font-sans selection:bg-accent overflow-hidden">
       <StockHeader
         filterTerm={watchlistFilterTerm}
         onFilterChange={setWatchlistFilterTerm}
+        marketFilter={marketFilter}
+        onMarketFilterChange={setMarketFilter}
+        viewMode={viewMode}
+        onViewModeChange={setViewMode}
         colorMode={colorMode}
         onColorModeChange={setColorMode}
       />
@@ -227,6 +228,8 @@ export default function HomePage() {
         runtimeLabel={runtimeLabel}
         lastRefreshAt={lastRefreshAt}
         colorMode={colorMode}
+        viewMode={viewMode}
+        alerts={alerts}
         onOpenAddDialog={() => setIsAddDialogOpen(true)}
         onOpenAlertDialog={setAlertDialogQuote}
         onOpenDetailsDialog={setDetailsDialogQuote}

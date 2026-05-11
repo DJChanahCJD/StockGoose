@@ -1,36 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
 import type { CSSProperties } from "react";
 import type { StockQuote } from "@shared/types";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  Bell,
-  Clock3,
-  Edit3,
-  FileText,
-  GripHorizontal,
-  Trash2,
-  TrendingDown,
-  TrendingUp,
-} from "lucide-react";
+import { Clock3, GripHorizontal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
-  ContextMenuTrigger,
-} from "@/components/ui/context-menu";
+import { ContextMenu, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { useStockQuoteTrend } from "@/hooks/use-stock-quote-trend";
 import type { ColorMode } from "./stock-utils";
-import {
-  buildFallbackTrend,
-  buildPolylinePoints,
-  formatNumber,
-  formatUpdateTime,
-  getQuoteTone,
-} from "./stock-utils";
+import { formatNumber, formatUpdateTime } from "./stock-utils";
+import { StockContextMenuContent } from "./stock-context-menu";
 
 type StockCardProps = {
   quote: StockQuote;
@@ -52,9 +32,9 @@ export function StockCard({
   onDetails,
   onDelete,
 }: StockCardProps) {
-  const trend = useMemo(
-    () => (quote.trend.length ? quote.trend.map((item) => item.price) : null),
-    [quote.trend]
+  const { colorClass, bgLightClass, isUp, Icon, points } = useStockQuoteTrend(
+    quote,
+    colorMode
   );
   const {
     attributes,
@@ -65,14 +45,6 @@ export function StockCard({
     transition,
     isDragging,
   } = useSortable({ id: quote.secid, disabled: dragDisabled });
-  const { colorClass, bgLightClass, isUp } = getQuoteTone(quote, colorMode);
-  const Icon = isUp ? TrendingUp : TrendingDown;
-
-  const fallbackPoints = useMemo(
-    () => buildPolylinePoints(buildFallbackTrend(quote.price ?? 1)),
-    [quote.price]
-  );
-  const points = trend ? buildPolylinePoints(trend) : fallbackPoints;
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -195,21 +167,11 @@ export function StockCard({
             </button>
           </div>
         </ContextMenuTrigger>
-        <ContextMenuContent>
-          <ContextMenuItem disabled>
-            <Edit3 className="w-4 h-4" />
-            编辑（待实现）
-          </ContextMenuItem>
-          <ContextMenuItem onSelect={onAlert}>
-            <Bell className="w-4 h-4" />
-            提醒规则
-          </ContextMenuItem>
-          <ContextMenuSeparator />
-          <ContextMenuItem variant="destructive" onSelect={onDelete}>
-            <Trash2 className="w-4 h-4" />
-            删除
-          </ContextMenuItem>
-        </ContextMenuContent>
+        <StockContextMenuContent
+          onAlert={onAlert}
+          onDetails={onDetails}
+          onDelete={onDelete}
+        />
       </ContextMenu>
     </div>
   );

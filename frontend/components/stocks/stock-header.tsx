@@ -1,13 +1,25 @@
 "use client";
 
-import { Palette, Search, X } from "lucide-react";
+import { Grid2X2, List, Palette, Search, X } from "lucide-react";
 import { GooseLogo } from "@/components/logo";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import type { ColorMode } from "./stock-utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import type { ColorMode, MarketFilter, StockViewMode } from "./stock-utils";
 
 type StockHeaderProps = {
   filterTerm: string;
   onFilterChange: (value: string) => void;
+  marketFilter: MarketFilter;
+  onMarketFilterChange: (value: MarketFilter) => void;
+  viewMode: StockViewMode;
+  onViewModeChange: (value: StockViewMode) => void;
   colorMode: ColorMode;
   onColorModeChange: (mode: ColorMode) => void;
 };
@@ -18,6 +30,10 @@ type StockHeaderProps = {
 export function StockHeader({
   filterTerm,
   onFilterChange,
+  marketFilter,
+  onMarketFilterChange,
+  viewMode,
+  onViewModeChange,
   colorMode,
   onColorModeChange,
 }: StockHeaderProps) {
@@ -33,6 +49,26 @@ export function StockHeader({
         </div>
 
         <div className="flex items-center gap-2 pointer-events-auto">
+          <Select
+            value={marketFilter}
+            onValueChange={(value) =>
+              onMarketFilterChange(value as MarketFilter)
+            }
+          >
+            <SelectTrigger
+              size="sm"
+              className="h-8 w-[92px] rounded-full text-xs"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部</SelectItem>
+              <SelectItem value="cn">A股</SelectItem>
+              <SelectItem value="hk">港股</SelectItem>
+              <SelectItem value="us">美股</SelectItem>
+            </SelectContent>
+          </Select>
+
           <div className="relative group w-64">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
             <input
@@ -50,6 +86,32 @@ export function StockHeader({
               </button>
             )}
           </div>
+
+          <ToggleGroup
+            type="single"
+            value={viewMode}
+            onValueChange={(value) => {
+              if (value) onViewModeChange(value as StockViewMode);
+            }}
+            size="sm"
+            className="rounded-lg border border-border bg-background"
+          >
+            <ToggleGroupItem
+              value="card"
+              aria-label="卡片模式"
+              title="卡片模式"
+            >
+              <Grid2X2 className="h-4 w-4" />
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="list"
+              aria-label="列表模式"
+              title="列表模式"
+            >
+              <List className="h-4 w-4" />
+            </ToggleGroupItem>
+          </ToggleGroup>
+
           <button
             onClick={() => onColorModeChange(colorMode === "us" ? "cn" : "us")}
             className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"

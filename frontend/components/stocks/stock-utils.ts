@@ -2,21 +2,13 @@ import type { AlertRule, StockQuote } from "@shared/types";
 
 export type AlertDraft = { type: AlertRule["type"]; threshold: string };
 export type ColorMode = "us" | "cn";
+export type MarketFilter = "all" | "cn" | "hk" | "us";
+export type StockViewMode = "card" | "list";
 
-export const ALERT_LABELS: Record<AlertRule["type"], string> = {
-  PRICE_ABOVE: "价格高于",
-  PRICE_BELOW: "价格低于",
-  CHANGE_PERCENT_ABOVE: "涨幅高于",
-  CHANGE_PERCENT_BELOW: "跌幅低于",
-};
-
-export const ALERT_OPTIONS: Array<{ value: AlertRule["type"]; label: string }> =
-  [
-    { value: "PRICE_ABOVE", label: "价格高于" },
-    { value: "PRICE_BELOW", label: "价格低于" },
-    { value: "CHANGE_PERCENT_ABOVE", label: "日涨幅大于(%)" },
-    { value: "CHANGE_PERCENT_BELOW", label: "日跌幅大于(%)" },
-  ];
+/** EastMoney 市场码常量，与 api.ts QT_MARKET_MAP 保持一致 */
+const MARKET_CN = ["0", "1"] as const;
+const MARKET_HK = "116";
+const MARKET_US = "105";
 
 /**
  * 为没有趋势数据的标的生成轻量占位走势。
@@ -55,31 +47,17 @@ export function buildPolylinePoints(data: number[]): string {
 }
 
 /**
- * 判断一条提醒规则是否被当前行情触发。
+ * 判断标的是否命中市场筛选。
  */
-export function isAlertTriggered(rule: AlertRule, quote: StockQuote): boolean {
-  if (rule.type === "PRICE_ABOVE") {
-    return quote.price !== null && quote.price >= rule.threshold;
-  }
-  if (rule.type === "PRICE_BELOW") {
-    return quote.price !== null && quote.price <= rule.threshold;
-  }
-  if (rule.type === "CHANGE_PERCENT_ABOVE") {
-    return (
-      quote.changePercent !== null && quote.changePercent >= rule.threshold
-    );
-  }
-  return (
-    quote.changePercent !== null &&
-    quote.changePercent <= -Math.abs(rule.threshold)
-  );
-}
-
-/**
- * 获取标的展示名称。
- */
-export function getDisplayName(quote: StockQuote): string {
-  return quote.name || quote.code;
+export function matchesMarketFilter(
+  quote: StockQuote,
+  filter: MarketFilter
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "cn")
+    return MARKET_CN.includes(quote.market as (typeof MARKET_CN)[number]);
+  if (filter === "hk") return quote.market === MARKET_HK;
+  return quote.market === MARKET_US;
 }
 
 /**
