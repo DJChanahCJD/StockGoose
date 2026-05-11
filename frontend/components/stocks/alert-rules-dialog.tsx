@@ -1,13 +1,34 @@
 "use client";
 
+import { useState } from "react";
 import type { AlertRule, StockQuote } from "@shared/types";
 import { Plus, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Empty, EmptyDescription } from "@/components/ui/empty";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ALERT_LABELS, ALERT_OPTIONS } from "@/lib/stocks/alert-rules";
 import type { AlertDraft } from "./stock-utils";
 import { formatNumber } from "./stock-utils";
@@ -34,90 +55,130 @@ export function AlertRulesDialog({
   alerts,
   onRemoveAlert,
 }: AlertRulesDialogProps) {
+  const [ruleToDelete, setRuleToDelete] = useState<string | null>(null);
+
   const quoteAlerts = quote
     ? alerts.filter((alert) => alert.secid === quote.secid)
     : [];
 
+  const handleConfirmDelete = () => {
+    if (ruleToDelete) {
+      onRemoveAlert(ruleToDelete);
+      setRuleToDelete(null);
+    }
+  };
+
   return (
-    <Dialog open={Boolean(quote)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="p-0 overflow-hidden gap-0 sm:max-w-sm">
-        {quote && (
-          <>
-            <DialogHeader className="p-4 border-b border-border bg-muted/30">
-              <DialogTitle>设置提醒</DialogTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {quote.code} - 当前: {formatNumber(quote.price, 2)}
-              </p>
-            </DialogHeader>
+    <>
+      <Dialog open={Boolean(quote)} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="p-0 overflow-hidden gap-0 sm:max-w-sm">
+          {quote && (
+            <>
+              <DialogHeader className="p-4 border-b border-border bg-muted/30">
+                <DialogTitle>设置提醒</DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {quote.code} - 当前: {formatNumber(quote.price, 2)}
+                </p>
+              </DialogHeader>
 
-            <div className="p-5 flex flex-col gap-4">
-              <div className="flex gap-2">
-                <select
-                  value={draft.type}
-                  onChange={(event) =>
-                    onDraftChange({
-                      ...draft,
-                      type: event.target.value as AlertRule["type"],
-                    })
-                  }
-                  className="flex-1 bg-background border border-input rounded-lg px-2 py-2 text-sm outline-none focus:ring-1 focus:ring-ring text-foreground"
-                >
-                  {ALERT_OPTIONS.map((item) => (
-                    <option key={item.value} value={item.value}>
-                      {item.label}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  type="number"
-                  placeholder="数值"
-                  value={draft.threshold}
-                  onChange={(event) =>
-                    onDraftChange({ ...draft, threshold: event.target.value })
-                  }
-                  className="w-24 bg-background border border-input rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring text-foreground"
-                />
-              </div>
-              <button
-                onClick={onAddAlert}
-                className="w-full bg-primary text-primary-foreground rounded-lg py-2 text-sm font-medium hover:opacity-90 transition-opacity flex items-center justify-center gap-1"
-              >
-                <Plus className="w-4 h-4" /> 添加规则
-              </button>
+              <div className="p-5 flex flex-col gap-4">
+                <div className="flex gap-2">
+                  <Select
+                    value={draft.type}
+                    onValueChange={(value) =>
+                      onDraftChange({
+                        ...draft,
+                        type: value as AlertRule["type"],
+                      })
+                    }
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="选择提醒类型" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ALERT_OPTIONS.map((item) => (
+                        <SelectItem key={item.value} value={item.value}>
+                          {item.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    type="number"
+                    placeholder="数值"
+                    value={draft.threshold}
+                    onChange={(event) =>
+                      onDraftChange({
+                        ...draft,
+                        threshold: event.target.value,
+                      })
+                    }
+                    className="w-24"
+                  />
+                </div>
+                <Button onClick={onAddAlert} className="w-full">
+                  <Plus data-icon="inline-start" />
+                  添加规则
+                </Button>
 
-              <div className="mt-4">
-                <h4 className="text-xs font-bold text-muted-foreground mb-2 uppercase tracking-wider">
-                  已有规则
-                </h4>
-                <div className="flex flex-col gap-2 max-h-40 overflow-y-auto">
-                  {quoteAlerts.map((rule) => (
-                    <div
-                      key={rule.id}
-                      className="flex items-center justify-between bg-secondary/50 px-3 py-2 rounded-lg border border-border"
-                    >
-                      <span className="text-xs font-medium text-secondary-foreground">
-                        {ALERT_LABELS[rule.type]} {rule.threshold}
-                        {rule.type.includes("CHANGE") ? "%" : ""}
-                      </span>
-                      <button
-                        onClick={() => onRemoveAlert(rule.id)}
-                        className="text-muted-foreground hover:text-destructive transition-colors"
+                <div className="mt-4">
+                  <h4 className="text-xs font-bold text-muted-foreground mb-2 uppercase tracking-wider">
+                    已有规则
+                  </h4>
+                  <div className="flex flex-col gap-2 max-h-40 overflow-y-auto">
+                    {quoteAlerts.map((rule) => (
+                      <div
+                        key={rule.id}
+                        className="flex items-center justify-between px-3 py-2"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                  {quoteAlerts.length === 0 && (
-                    <div className="text-xs text-muted-foreground text-center py-4 bg-secondary/50 rounded-lg border border-border border-dashed">
-                      暂无提醒规则
-                    </div>
-                  )}
+                        <span className="text-xs font-medium text-secondary-foreground">
+                          {ALERT_LABELS[rule.type]} {rule.threshold}
+                          {rule.type.includes("CHANGE") ? "%" : ""}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setRuleToDelete(rule.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    ))}
+                    {quoteAlerts.length === 0 && (
+                      <Empty>
+                        <EmptyDescription>暂无提醒规则</EmptyDescription>
+                      </Empty>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={Boolean(ruleToDelete)}
+        onOpenChange={(open) => !open && setRuleToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除这条提醒规则吗？此操作无法撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

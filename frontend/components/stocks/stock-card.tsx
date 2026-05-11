@@ -186,11 +186,7 @@ export function StockCard({
             </button>
           </div>
         </ContextMenuTrigger>
-        <StockContextMenuContent
-          onAlert={onAlert}
-          onDetails={onDetails}
-          onDelete={onDelete}
-        />
+        <StockContextMenuContent onAlert={onAlert} onDelete={onDelete} />
       </ContextMenu>
     </div>
   );

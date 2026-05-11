@@ -9,7 +9,6 @@ import {
 
 type StockContextMenuContentProps = {
   onAlert: () => void;
-  onDetails: () => void;
   onDelete: () => void;
 };
 
@@ -18,7 +17,6 @@ type StockContextMenuContentProps = {
  */
 export function StockContextMenuContent({
   onAlert,
-  onDetails,
   onDelete,
 }: StockContextMenuContentProps) {
   return (
@@ -27,13 +25,9 @@ export function StockContextMenuContent({
         <Edit3 className="h-4 w-4" />
         编辑（待实现）
       </ContextMenuItem>
-      <ContextMenuItem onSelect={onDetails}>
-        <FileText className="h-4 w-4" />
-        详情
-      </ContextMenuItem>
       <ContextMenuItem onSelect={onAlert}>
         <Bell className="h-4 w-4" />
-        提醒规则
+        涨跌提醒
       </ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuItem variant="destructive" onSelect={onDelete}>

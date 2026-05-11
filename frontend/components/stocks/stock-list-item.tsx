@@ -153,11 +153,7 @@ export function StockListItem({
             </div>
           </div>
         </ContextMenuTrigger>
-        <StockContextMenuContent
-          onAlert={onAlert}
-          onDetails={onDetails}
-          onDelete={onDelete}
-        />
+        <StockContextMenuContent onAlert={onAlert} onDelete={onDelete} />
       </ContextMenu>
     </div>
   );

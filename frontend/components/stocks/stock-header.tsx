@@ -272,8 +272,9 @@ export function StockHeader({
     >
       <div className="max-w-7xl mx-auto w-full min-h-14 px-6 flex items-center justify-between gap-3 pointer-events-none">
         <div
-          className="flex items-center gap-3 text-foreground cursor-pointer"
+          className="flex items-center gap-3 text-foreground pointer-events-auto cursor-pointer"
           onClick={() => window.location.reload()}
+          title="点击刷新"
         >
           <GooseLogo className="w-5 h-5" />
           <h1 className="font-bold tracking-tight text-md">StockGoose</h1>
