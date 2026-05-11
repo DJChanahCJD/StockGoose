@@ -72,7 +72,6 @@ export default function HomePage() {
     importUserData,
     refreshQuotes,
     refreshQuotesFor,
-    refreshSnapshotFor,
     refreshSnapshots,
   } = useStockStore();
 
@@ -323,7 +322,6 @@ export default function HomePage() {
         quote={detailsDialogQuote}
         colorMode={colorMode}
         onClose={() => setDetailsDialogSecid(null)}
-        onRefreshSnapshot={refreshSnapshotFor}
       />
       <DeleteStockDialog
         quote={deleteDialogQuote}
