@@ -126,6 +126,27 @@ function buildSinaFinanceUrl(code: string, market: string): string {
 }
 
 /**
+ * 生成腾讯财经外链，未知市场退回站内搜索。
+ */
+function buildTencentUrl(code: string, market: string): string {
+  const prefixMap: Record<string, string> = {
+    "0": "sz",   // 深圳
+    "1": "sh",   // 上海
+    "105": "us", // 美股
+    "116": "hk", // 港股
+  };
+
+  const prefix = prefixMap[market];
+  if (prefix) {
+    return `https://gu.qq.com/${prefix}${code}`;
+  }
+
+  return `https://stockapp.finance.qq.com/mstats/`
+  // 未知市场退回搜索
+  // return `https://gu.qq.com/search?q=${encodeURIComponent(code)}`;
+}
+
+/**
  * 根据股票代码和市场生成外部网站链接。
  * @param code - 股票代码
  * @param market - 市场编码 ("0"=深圳, "1"=上海, "100"=全球指数, "105"=美股, "116"=港股)
@@ -143,6 +164,10 @@ export function generateExternalLinks(
     {
       name: "雪球",
       url: buildXueqiuUrl(code, market),
+    },
+    {
+      name: "腾讯",
+      url: buildTencentUrl(code, market),
     },
     // TODO: 以下这两个数据源质量一般，考虑删除
     {
