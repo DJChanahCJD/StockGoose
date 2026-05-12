@@ -50,6 +50,7 @@ export function StockDetailsDialog({
   colorMode,
   onClose,
 }: StockDetailsDialogProps) {
+  const secid = quote?.secid ?? null;
   const [range, setRange] = useState<StockHistoryRange>("1m");
   const [history, setHistory] = useState<StockHistoryPoint[]>([]);
   const [loading, setLoading] = useState(false);
@@ -58,22 +59,32 @@ export function StockDetailsDialog({
   const { colorClass } = quote
     ? getQuoteTone(quote, colorMode)
     : { colorClass: "text-success" };
+  const quoteCode = quote?.code ?? null;
+  const quoteMarket = quote?.market ?? null;
 
   const externalLinks = useMemo<ExternalLinkType[]>(() => {
-    if (!quote) return [];
-    return generateExternalLinks(quote.code, quote.market);
-  }, [quote]);
+    if (!quoteCode || !quoteMarket) return [];
+    return generateExternalLinks(quoteCode, quoteMarket);
+  }, [quoteCode, quoteMarket]);
 
   useEffect(() => {
-    if (!quote) return;
+    setHistory([]);
+    setError(null);
+  }, [secid]);
+
+  useEffect(() => {
+    if (!secid) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
-    const secid = quote.secid;
+    const currentSecid = secid;
 
     async function loadHistory(): Promise<void> {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchStockHistory(secid, range);
+        const data = await fetchStockHistory(currentSecid, range);
         if (!cancelled) setHistory(data);
       } catch (loadError) {
         if (!cancelled) {
@@ -91,7 +102,7 @@ export function StockDetailsDialog({
     return () => {
       cancelled = true;
     };
-  }, [quote, range, reloadKey]);
+  }, [secid, range, reloadKey]);
 
   return (
     <Dialog open={Boolean(quote)} onOpenChange={(open) => !open && onClose()}>
@@ -154,17 +165,26 @@ export function StockDetailsDialog({
             </div>
 
             <div className="rounded-xl border border-border bg-card p-3 shadow-sm sm:p-4">
-              {loading ? (
+              {loading && history.length <= 1 ? (
                 <div className="flex h-[160px] items-center justify-center text-sm text-muted-foreground sm:h-[224px]">
                   加载历史走势中...
                 </div>
-              ) : error ? (
+              ) : error && history.length <= 1 ? (
                 <HistoryError
                   message={error}
                   onRetry={() => setReloadKey((current) => current + 1)}
                 />
               ) : history.length > 1 ? (
-                <HistoryChart points={history} colorMode={colorMode} />
+                <div className="relative">
+                  <HistoryChart points={history} colorMode={colorMode} />
+                  {loading && <HistoryLoadingBadge />}
+                  {error && (
+                    <HistoryInlineError
+                      message={error}
+                      onRetry={() => setReloadKey((current) => current + 1)}
+                    />
+                  )}
+                </div>
               ) : (
                 <HistoryError
                   message="历史走势暂不可用"
@@ -199,6 +219,42 @@ export function StockDetailsDialog({
   );
 }
 
+/**
+ * 渲染历史图保留期间的轻量加载提示。
+ */
+function HistoryLoadingBadge() {
+  return (
+    <div className="absolute right-0 top-0 inline-flex items-center gap-1 rounded-md bg-background/90 px-2 py-1 text-xs text-muted-foreground shadow-sm">
+      <RefreshCw className="h-3 w-3 animate-spin" />
+      更新中
+    </div>
+  );
+}
+
+/**
+ * 渲染保留旧历史图时的轻量错误提示。
+ */
+function HistoryInlineError({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-xs text-muted-foreground">
+      <span>{message}</span>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="shrink-0 font-medium text-foreground hover:text-primary"
+      >
+        重试
+      </button>
+    </div>
+  );
+}
+
 function HistoryError({
   message,
   onRetry,
@@ -230,7 +286,7 @@ function HistoryChart({
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  const { path, min, range, zeroY } = useMemo(() => {
+  const { path, zeroY } = useMemo(() => {
     const values = points.map((p) => p.changePercent);
     const minVal = Math.min(...values, 0);
     const maxVal = Math.max(...values, 0);
@@ -245,7 +301,7 @@ function HistoryChart({
       })
       .join(" ");
 
-    return { path: pathString, min: minVal, range: rangeVal, zeroY: getY(0) };
+    return { path: pathString, zeroY: getY(0) };
   }, [points]);
 
   const activeIndex = hoverIndex ?? points.length - 1;
