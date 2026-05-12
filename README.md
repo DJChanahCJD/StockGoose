@@ -3,7 +3,7 @@
 <p align="center">
   <img width="100" alt="StockGoose logo" src="public/logo.svg">
 </p>
-<p align="center"><strong>StockGoose</strong> - 自选股实时行情监控面板</p>
+<p align="center"><strong>StockGoose</strong> - 极简自选股实时监控面板</p>
 
 <p align="center">
   <img src="https://img.shields.io/badge/Next.js-16-black?logo=nextdotjs&logoColor=white" />
@@ -13,24 +13,21 @@
   <img src="https://img.shields.io/badge/State-Zustand-orange" />
 </p>
 
-StockGoose 是一个纯前端自选股行情面板，用于本地维护自选标的、查看行情走势并配置浏览器端价格提醒。行情数据由浏览器直连公开数据源，不经过项目后端。
+StockGoose 是一个纯前端自选股行情面板。浏览器直接连接公开行情源，无后端、无账号、无数据中转；自选、提醒和偏好都保存在本地。
 
-## 功能
+> 体验站点：[StockGoose](https://stockgoose.pages.dev/)
 
-- 自选标的管理（添加、右键/长按菜单、拖拽排序、删除确认）
-- 实时行情展示（价格、涨跌幅、走势图）、价格提醒规则
-- 标的详情外链（东方财富、雪球、同花顺、新浪财经）
-- 日夜模式、涨跌颜色切换、市场筛选、网格/列表视图
-- 用户数据导入导出
+## 特性
+
+- 自选股管理：添加、删除、排序、筛选、卡片/列表视图
+- 实时行情：价格、涨跌幅、分时走势、历史走势
+- 价格提醒：浏览器端规则判断，支持系统通知和站内提示
+- 本地优先：用户数据导入导出，不上传自选或提醒配置
+- 轻量体验：纯静态部署，前端直连数据源，少依赖、低维护
 
 ## 技术栈
 
-| 层   | 技术                               |
-| ---- | ---------------------------------- |
-| 前端 | Next.js 16 (App Router) + React 19 |
-| 样式 | Tailwind CSS v4 + shadcn/ui        |
-| 状态 | Zustand + persist                  |
-| 类型 | TypeScript                         |
+Next.js 16 / React 19 / TypeScript / Tailwind CSS / shadcn/ui / Zustand
 
 ## 快速开始
 
@@ -51,25 +48,11 @@ npm run typecheck
 
 ## 部署
 
-构建命令：
-
 ```bash
 npm run build
 ```
 
 静态输出目录：`out`
-
-## 项目结构
-
-```text
-├── app/             # 页面与布局
-├── components/      # UI 与业务组件
-├── hooks/           # React hooks
-├── lib/             # 行情直连、提醒、存储与工具函数
-├── public/          # 静态资源
-├── stores/          # Zustand 状态管理
-└── .husky/          # Git hooks
-```
 
 ## 数据来源
 
