@@ -30,11 +30,20 @@ type StockDetailsDialogProps = {
 };
 
 type RangeOption = {
-  value: StockHistoryRange;
+  value: DetailsRange;
   label: string;
 };
 
+type DetailsRange = "intraday" | StockHistoryRange;
+
+type TrendChartPoint = {
+  label: string;
+  price: number;
+  changePercent: number;
+};
+
 const RANGE_OPTIONS: RangeOption[] = [
+  { value: "intraday", label: "分时" },
   { value: "1m", label: "近1月" },
   { value: "3m", label: "近3月" },
   { value: "6m", label: "近6月" },
@@ -51,7 +60,7 @@ export function StockDetailsDialog({
   onClose,
 }: StockDetailsDialogProps) {
   const secid = quote?.secid ?? null;
-  const [range, setRange] = useState<StockHistoryRange>("1m");
+  const [range, setRange] = useState<DetailsRange>("intraday");
   const [history, setHistory] = useState<StockHistoryPoint[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,18 +82,20 @@ export function StockDetailsDialog({
   }, [secid]);
 
   useEffect(() => {
-    if (!secid) {
+    if (!secid || range === "intraday") {
       setLoading(false);
+      setError(null);
       return;
     }
     let cancelled = false;
     const currentSecid = secid;
+    const currentRange = range;
 
     async function loadHistory(): Promise<void> {
       try {
         setLoading(true);
         setError(null);
-        const data = await fetchStockHistory(currentSecid, range);
+        const data = await fetchStockHistory(currentSecid, currentRange);
         if (!cancelled) setHistory(data);
       } catch (loadError) {
         if (!cancelled) {
@@ -103,6 +114,16 @@ export function StockDetailsDialog({
       cancelled = true;
     };
   }, [secid, range, reloadKey]);
+
+  const chartPoints = useMemo(() => {
+    if (!quote) return [];
+    if (range === "intraday") return buildIntradayChartPoints(quote);
+    return history.map((point) => ({
+      label: point.date,
+      price: point.close,
+      changePercent: point.changePercent,
+    }));
+  }, [history, quote, range]);
 
   return (
     <Dialog open={Boolean(quote)} onOpenChange={(open) => !open && onClose()}>
@@ -165,7 +186,13 @@ export function StockDetailsDialog({
             </div>
 
             <div className="rounded-xl border border-border bg-card p-3 shadow-sm sm:p-4">
-              {loading && history.length <= 1 ? (
+              {range === "intraday" && chartPoints.length > 1 ? (
+                <TrendChart points={chartPoints} colorMode={colorMode} />
+              ) : range === "intraday" ? (
+                <div className="flex h-[160px] items-center justify-center text-sm text-muted-foreground sm:h-[224px]">
+                  分时走势暂不可用
+                </div>
+              ) : loading && history.length <= 1 ? (
                 <div className="flex h-[160px] items-center justify-center text-sm text-muted-foreground sm:h-[224px]">
                   加载历史走势中...
                 </div>
@@ -176,7 +203,7 @@ export function StockDetailsDialog({
                 />
               ) : history.length > 1 ? (
                 <div className="relative">
-                  <HistoryChart points={history} colorMode={colorMode} />
+                  <TrendChart points={chartPoints} colorMode={colorMode} />
                   {loading && <HistoryLoadingBadge />}
                   {error && (
                     <HistoryInlineError
@@ -277,11 +304,14 @@ function HistoryError({
   );
 }
 
-function HistoryChart({
+/**
+ * 渲染分时或历史区间的统一趋势图。
+ */
+function TrendChart({
   points,
   colorMode,
 }: {
-  points: StockHistoryPoint[];
+  points: TrendChartPoint[];
   colorMode: ColorMode;
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
@@ -326,7 +356,7 @@ function HistoryChart({
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-xs font-medium text-muted-foreground">
-            {active.date}
+            {active.label}
           </div>
           <div
             className={cn(
@@ -339,11 +369,9 @@ function HistoryChart({
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xs font-medium text-muted-foreground">
-            收盘价
-          </div>
+          <div className="text-xs font-medium text-muted-foreground">价格</div>
           <div className="mt-1 font-mono text-base font-semibold">
-            {formatNumber(active.close, 2)}
+            {formatNumber(active.price, 2)}
           </div>
         </div>
       </div>
@@ -392,4 +420,18 @@ function HistoryChart({
       </div>
     </div>
   );
+}
+
+/**
+ * 将分时价格转换为统一趋势图数据。
+ */
+function buildIntradayChartPoints(quote: StockQuote): TrendChartPoint[] {
+  const previousClose = quote.previousClose;
+  if (!previousClose) return [];
+
+  return quote.trend.map((point) => ({
+    label: point.time,
+    price: point.price,
+    changePercent: Number(((point.price / previousClose - 1) * 100).toFixed(2)),
+  }));
 }
