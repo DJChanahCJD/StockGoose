@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import type { PointerEvent } from "react";
 import type {
   StockHistoryPoint,
   StockHistoryRange,
@@ -53,6 +54,9 @@ const RANGE_OPTIONS: RangeOption[] = [
   { value: "10y", label: "近10年" },
   { value: "all", label: "全部" },
 ];
+
+const CHART_X_MIN = 2;
+const CHART_X_RANGE = 96;
 
 export function StockDetailsDialog({
   quote,
@@ -127,20 +131,20 @@ export function StockDetailsDialog({
 
   return (
     <Dialog open={Boolean(quote)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[90vh] max-w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-3xl">
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-hidden overflow-y-auto p-4 sm:max-w-3xl sm:p-6">
         {quote && (
           <>
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                {quote.name}
-                <Badge variant="secondary" className="font-mono">
+              <DialogTitle className="flex min-w-0 flex-wrap items-center gap-2 pr-6 text-left">
+                <span className="min-w-0 truncate">{quote.name}</span>
+                <Badge variant="secondary" className="shrink-0 font-mono">
                   {quote.code}
                 </Badge>
               </DialogTitle>
             </DialogHeader>
 
-            <div className="flex flex-col gap-3">
-              <div>
+            <div className="flex min-w-0 flex-col gap-3">
+              <div className="min-w-0">
                 {/* 优化点：更新时间与“当前价”融合在同一行 */}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span>当前价</span>
@@ -150,8 +154,8 @@ export function StockDetailsDialog({
                   </span>
                 </div>
 
-                <div className="mt-1 flex items-baseline gap-3">
-                  <span className="font-mono text-3xl font-semibold sm:text-4xl">
+                <div className="mt-1 flex min-w-0 items-baseline gap-3">
+                  <span className="min-w-0 font-mono text-3xl font-semibold sm:text-4xl">
                     {formatNumber(quote.price, 2)}
                   </span>
                   <span
@@ -185,7 +189,7 @@ export function StockDetailsDialog({
               </div>
             </div>
 
-            <div className="rounded-xl border border-border bg-card p-3 shadow-sm sm:p-4">
+            <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card p-3 shadow-sm sm:p-4">
               {range === "intraday" && chartPoints.length > 1 ? (
                 <TrendChart points={chartPoints} colorMode={colorMode} />
               ) : range === "intraday" ? (
@@ -202,7 +206,7 @@ export function StockDetailsDialog({
                   onRetry={() => setReloadKey((current) => current + 1)}
                 />
               ) : history.length > 1 ? (
-                <div className="relative">
+                <div className="relative min-w-0 overflow-hidden">
                   <TrendChart points={chartPoints} colorMode={colorMode} />
                   {loading && <HistoryLoadingBadge />}
                   {error && (
@@ -316,33 +320,38 @@ function TrendChart({
 }) {
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  const { path, zeroY } = useMemo(() => {
+  const { coordinates, path, zeroY } = useMemo(() => {
     const values = points.map((p) => p.changePercent);
     const minVal = Math.min(...values, 0);
     const maxVal = Math.max(...values, 0);
     const rangeVal = maxVal - minVal || 1;
 
+    const getX = (index: number) =>
+      CHART_X_MIN + (index / (points.length - 1)) * CHART_X_RANGE;
     const getY = (val: number) => 95 - ((val - minVal) / rangeVal) * 90;
+    const chartCoordinates = points.map((point, index) => ({
+      x: getX(index),
+      y: getY(point.changePercent),
+    }));
 
-    const pathString = points
+    const pathString = chartCoordinates
       .map((point, index) => {
-        const x = (index / (points.length - 1)) * 100;
-        return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${getY(point.changePercent).toFixed(2)}`;
+        return `${index === 0 ? "M" : "L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
       })
       .join(" ");
 
-    return { path: pathString, zeroY: getY(0) };
+    return { coordinates: chartCoordinates, path: pathString, zeroY: getY(0) };
   }, [points]);
 
   const activeIndex = hoverIndex ?? points.length - 1;
   const active = points[activeIndex];
-  const activeX = (activeIndex / (points.length - 1)) * 100;
+  const activePoint = coordinates[activeIndex];
 
   const isUp = active.changePercent >= 0;
   const isRedTone = colorMode === "cn" ? isUp : !isUp;
   const toneTextClass = isRedTone ? "text-danger" : "text-success";
 
-  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>): void {
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>): void {
     const rect = event.currentTarget.getBoundingClientRect();
     const ratio = Math.min(
       1,
@@ -377,13 +386,13 @@ function TrendChart({
       </div>
 
       <div
-        className="relative h-40 w-full cursor-crosshair touch-none sm:h-56"
+        className="relative h-40 w-full min-w-0 cursor-crosshair touch-none overflow-hidden sm:h-56"
         onPointerMove={handlePointerMove}
         onPointerLeave={() => setHoverIndex(null)}
       >
         <svg
           viewBox="0 0 100 100"
-          className="absolute inset-0 h-full w-full overflow-visible pointer-events-none"
+          className="pointer-events-none absolute inset-0 h-full w-full"
           preserveAspectRatio="none"
         >
           <line
@@ -407,8 +416,8 @@ function TrendChart({
             vectorEffect="non-scaling-stroke"
           />
           <line
-            x1={activeX}
-            x2={activeX}
+            x1={activePoint.x}
+            x2={activePoint.x}
             y1="0"
             y2="100"
             stroke="currentColor"
@@ -417,6 +426,10 @@ function TrendChart({
             vectorEffect="non-scaling-stroke"
           />
         </svg>
+        <div
+          className="pointer-events-none absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-blue-600 shadow-sm"
+          style={{ left: `${activePoint.x}%`, top: `${activePoint.y}%` }}
+        />
       </div>
     </div>
   );
