@@ -28,6 +28,28 @@ type TrendsApiData = {
   trends?: string[];
 };
 
+type RawHistoryPoint = {
+  date: string;
+  close: number;
+};
+
+type KlineApiResponse = {
+  rc?: number;
+  data?: {
+    klines?: string[];
+  };
+};
+
+type TencentKlinePoint = [string, string, string, string, string, string];
+
+type TencentKlineResponse = {
+  code?: number;
+  data?: Record<
+    string,
+    { qfqday?: TencentKlinePoint[]; day?: TencentKlinePoint[] }
+  >;
+};
+
 /**
  * 读取 JSON 并统一转换错误。
  */
@@ -153,6 +175,151 @@ async function fetchQuoteDirect(secid: string, days = 1): Promise<StockQuote> {
 }
 
 /**
+ * 根据区间筛选历史日 K 数据。
+ */
+function filterHistoryByRange(
+  points: RawHistoryPoint[],
+  range: StockHistoryRange
+): RawHistoryPoint[] {
+  if (range === "all" || points.length === 0) return points;
+
+  const last = points.at(-1);
+  if (!last) return points;
+
+  const cutoff = new Date(`${last.date}T00:00:00`);
+  if (Number.isNaN(cutoff.getTime())) return points;
+
+  if (range === "1m") cutoff.setMonth(cutoff.getMonth() - 1);
+  if (range === "3m") cutoff.setMonth(cutoff.getMonth() - 3);
+  if (range === "6m") cutoff.setMonth(cutoff.getMonth() - 6);
+  if (range === "1y") cutoff.setFullYear(cutoff.getFullYear() - 1);
+  if (range === "3y") cutoff.setFullYear(cutoff.getFullYear() - 3);
+  if (range === "5y") cutoff.setFullYear(cutoff.getFullYear() - 5);
+  if (range === "10y") cutoff.setFullYear(cutoff.getFullYear() - 10);
+
+  return points.filter((point) => new Date(`${point.date}T00:00:00`) >= cutoff);
+}
+
+/**
+ * 将历史范围转换成 K 线请求条数。
+ */
+function getHistoryLimit(range: StockHistoryRange): number {
+  if (range === "1m") return 31;
+  if (range === "3m") return 93;
+  if (range === "6m") return 186;
+  if (range === "1y") return 366;
+  if (range === "3y") return 1095;
+  if (range === "5y") return 1825;
+  if (range === "10y") return 3650;
+  return 5000;
+}
+
+/**
+ * 解析 EastMoney 日 K 字符串中的日期和收盘价。
+ */
+function parseKline(line: string): RawHistoryPoint | null {
+  const [date, , close] = line.split(",");
+  const parsedClose = Number(close);
+  if (!date || !Number.isFinite(parsedClose)) return null;
+
+  return { date, close: parsedClose };
+}
+
+/**
+ * 将历史收盘价转换为区间累计涨跌幅。
+ */
+function buildHistoryPoints(points: RawHistoryPoint[]): StockHistoryPoint[] {
+  const base = points.find((point) => point.close > 0)?.close;
+  if (!base) return [];
+
+  return points.map((point) => ({
+    date: point.date,
+    close: Number(point.close.toFixed(3)),
+    changePercent: Number(((point.close / base - 1) * 100).toFixed(2)),
+  }));
+}
+
+/**
+ * 直连东方财富历史 K 线。
+ */
+async function fetchHistoryFromEastmoney(
+  secid: string,
+  range: StockHistoryRange
+): Promise<StockHistoryPoint[]> {
+  const url = new URL("https://push2his.eastmoney.com/api/qt/stock/kline/get");
+  url.searchParams.set("secid", secid);
+  url.searchParams.set("fields1", "f1,f2,f3,f4,f5,f6");
+  url.searchParams.set(
+    "fields2",
+    "f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61"
+  );
+  url.searchParams.set("klt", "101");
+  url.searchParams.set("fqt", "1");
+  url.searchParams.set("end", "20500101");
+  url.searchParams.set("lmt", String(getHistoryLimit(range)));
+
+  const body = await readJson<KlineApiResponse>(await fetch(url));
+  if (body.rc !== 0 || !body.data?.klines) {
+    throw new Error("东方财富历史走势格式异常");
+  }
+
+  const rawPoints = body.data.klines
+    .map(parseKline)
+    .filter((point): point is RawHistoryPoint => Boolean(point));
+  const points = buildHistoryPoints(filterHistoryByRange(rawPoints, range));
+  if (!points.length) throw new Error("东方财富历史走势为空");
+
+  return points;
+}
+
+/**
+ * 直连腾讯财经历史 K 线。
+ */
+async function fetchHistoryFromTencentDirect(
+  secid: string,
+  range: StockHistoryRange
+): Promise<StockHistoryPoint[]> {
+  const qtCode = toQtCode(secid);
+  if (!qtCode) throw new Error(`无法转换股票代码: ${secid}`);
+
+  const url = new URL("https://web.ifzq.gtimg.cn/appstock/app/fqkline/get");
+  url.searchParams.set(
+    "param",
+    `${qtCode},day,,,${getHistoryLimit(range)},qfq`
+  );
+
+  const body = await readJson<TencentKlineResponse>(await fetch(url));
+  const qtData = body.data?.[qtCode];
+  const dayData = qtData?.qfqday ?? qtData?.day;
+  if (!dayData?.length) throw new Error("腾讯历史走势为空");
+
+  const rawPoints = dayData.flatMap((entry) => {
+    const date = entry[0];
+    const close = Number(entry[2]);
+    if (!date || !Number.isFinite(close)) return [];
+    return [{ date, close }];
+  });
+  const points = buildHistoryPoints(filterHistoryByRange(rawPoints, range));
+  if (!points.length) throw new Error("腾讯历史走势处理后为空");
+
+  return points;
+}
+
+/**
+ * 直连历史 K 线数据源，优先东方财富，失败时回退腾讯财经。
+ */
+async function fetchHistoryDirect(
+  secid: string,
+  range: StockHistoryRange
+): Promise<StockHistoryPoint[]> {
+  try {
+    return await fetchHistoryFromEastmoney(secid, range);
+  } catch {
+    return fetchHistoryFromTencentDirect(secid, range);
+  }
+}
+
+/**
  * 搜索股票，网页端走后端代理，其他运行时直连。
  */
 export async function searchStocks(query: string): Promise<StockSearchItem[]> {
@@ -186,7 +353,7 @@ export async function fetchStockQuote(
 
 /**
  * 获取单个标的的历史累计涨跌幅。
- * 优先走东方财富，失败后回退到腾讯 K 线。
+ * 浏览器直连历史数据源，不经过后端代理。
  */
 export async function fetchStockHistory(
   secid: string,
@@ -196,23 +363,7 @@ export async function fetchStockHistory(
 
   return mutate(
     cacheKey,
-    async () => {
-      try {
-        return await retry(async () => {
-          const url = new URL("/stocks/history", API_URL);
-          url.searchParams.set("secid", secid);
-          url.searchParams.set("range", range);
-          return readApiResponse<StockHistoryPoint[]>(await fetch(url));
-        }, 2);
-      } catch {
-        return retry(async () => {
-          const url = new URL("/stocks/history-tencent", API_URL);
-          url.searchParams.set("secid", secid);
-          url.searchParams.set("range", range);
-          return readApiResponse<StockHistoryPoint[]>(await fetch(url));
-        }, 2);
-      }
-    },
+    () => retry(() => fetchHistoryDirect(secid, range), 2),
     { revalidate: false }
   ).then((result) => result ?? []);
 }
