@@ -64,7 +64,7 @@ function buildEastMoneyUrl(code: string, market: string): string {
  * 生成雪球外链，未知市场退回站内搜索。
  */
 function buildXueqiuUrl(code: string, market: string): string {
-  if (market === "105") {
+  if (market === "105" || market === "116") {
     return `https://xueqiu.com/S/${code}`;
   }
 
@@ -85,15 +85,15 @@ function buildXueqiuUrl(code: string, market: string): string {
  * 生成同花顺外链，非直达市场退回问财搜索。
  */
 function buildTonghuashunUrl(code: string, market: string): string {
-  if (market === "0" || market === "1") {
-    return `https://basic.10jqka.com.cn/${code}/`;
-  }
-
-  if (market === "116") {
+  if (market === "0" || market === "1" || market === "116") {
     return `https://stockpage.10jqka.com.cn/${code}/`;
   }
 
-  return `https://search.10jqka.com.cn/unifiedwap/home/index?w=${encodeURIComponent(code)}`;
+  return `https://www.10jqka.com.cn/`
+// 基金： https://fund.10jqka.com.cn/110020/
+// A股：https://stockpage.10jqka.com.cn/600519/
+// 港股：https://stockpage.10jqka.com.cn/HK1810/   or https://stockpage.10jqka.com.cn/01810/
+// 美股：https://stockpage.10jqka.com.cn/AAPL/
 }
 
 /**
