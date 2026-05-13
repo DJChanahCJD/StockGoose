@@ -6,6 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "test": "node --no-warnings --test lib/stocks/external-links.test.mjs",
+    "test:links:live": "node --no-warnings --test lib/stocks/external-links.live.test.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "prepare": "husky"
