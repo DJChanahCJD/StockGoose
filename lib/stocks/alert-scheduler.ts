@@ -1,10 +1,11 @@
 import type { AlertRule, StockQuote } from "@/lib/stocks/types";
 import { ALERT_LABELS, isAlertTriggered } from "./alert-rules";
 import type { AlertNotificationPayload, Notifier } from "./notifier";
+import type { PlatformAdapter } from "./scheduler-platform";
 
-export const DEFAULT_ACTIVE_INTERVAL_MS = 5000; // 活跃期 5 秒刷新一次
-export const DEFAULT_IDLE_INTERVAL_MS = 60000; // 静默期 60 秒刷新一次
-export const DEFAULT_UNCHANGED_THRESHOLD = 6; // 6 次内无变化，认为是静默退避
+export const DEFAULT_ACTIVE_INTERVAL_MS = 5000;
+export const DEFAULT_IDLE_INTERVAL_MS = 60000;
+export const DEFAULT_UNCHANGED_THRESHOLD = 6;
 
 type AlertSchedulerOptions = {
   getAlerts: () => AlertRule[];
@@ -12,6 +13,7 @@ type AlertSchedulerOptions = {
   refresh: () => Promise<void>;
   notifier: Notifier;
   onLocalNotify: (message: string) => void;
+  platform: PlatformAdapter;
   activeIntervalMs?: number;
   idleIntervalMs?: number;
   unchangedThreshold?: number;
@@ -19,9 +21,6 @@ type AlertSchedulerOptions = {
 
 type ResolvedAlertSchedulerOptions = Required<AlertSchedulerOptions>;
 
-/**
- * 按实时行情生成稳定签名，用于判断是否进入低频刷新。
- */
 function buildQuotesSignature(quotes: Record<string, StockQuote>): string {
   return Object.values(quotes)
     .map((quote) => ({
@@ -39,9 +38,7 @@ function buildQuotesSignature(quotes: Record<string, StockQuote>): string {
     .join("|");
 }
 
-/**
- * 统一调度全自选实时刷新、静默退避和提醒评估。
- */
+/** 统一调度全自选实时刷新、静默退避和提醒评估。 */
 export class AlertScheduler {
   private readonly options: ResolvedAlertSchedulerOptions;
   private readonly ruleStates = new Map<string, boolean>();
@@ -50,6 +47,8 @@ export class AlertScheduler {
   private lastSignature: string | null = null;
   private unchangedTicks = 0;
   private currentIntervalMs: number;
+  private unsubscribeForeground: (() => void) | null = null;
+
   constructor(options: AlertSchedulerOptions) {
     this.options = {
       ...options,
@@ -61,35 +60,39 @@ export class AlertScheduler {
     this.currentIntervalMs = this.options.activeIntervalMs;
   }
 
-  /**
-   * 启动全局刷新调度器并监听页面可见性。
-   */
+  /** 启动全局刷新调度器并监听平台前台/后台事件。 */
   start(): void {
     if (this.running) return;
     this.running = true;
-    document.addEventListener("visibilitychange", this.handleVisibilityChange);
-    if (document.visibilityState === "visible") {
+
+    this.unsubscribeForeground = this.options.platform.onForegroundChange(
+      (foreground) => {
+        if (!this.running) return;
+        if (foreground) {
+          this.currentIntervalMs = this.options.activeIntervalMs;
+          void this.tick();
+        } else {
+          this.clearTimer();
+        }
+      }
+    );
+
+    if (this.options.platform.isForeground()) {
       void this.tick();
     }
   }
 
-  /**
-   * 停止调度器并释放定时器与页面可见性监听。
-   */
+  /** 停止调度器并释放定时器与平台事件监听。 */
   stop(): void {
     this.running = false;
     this.clearTimer();
-    document.removeEventListener(
-      "visibilitychange",
-      this.handleVisibilityChange
-    );
+    this.unsubscribeForeground?.();
+    this.unsubscribeForeground = null;
   }
 
-  /**
-   * 刷新全自选实时行情，按数据变化调整下次刷新间隔。
-   */
+  /** 刷新全自选实时行情，按数据变化调整下次刷新间隔。 */
   async tick(): Promise<void> {
-    if (!this.running || document.visibilityState !== "visible") return;
+    if (!this.running || !this.options.platform.isForeground()) return;
     this.clearTimer();
 
     try {
@@ -103,9 +106,7 @@ export class AlertScheduler {
     }
   }
 
-  /**
-   * 清理已删除规则的触发状态并通知新触发规则。
-   */
+  /** 清理已删除规则的触发状态并通知新触发规则。 */
   private evaluate(): void {
     const alerts = this.options.getAlerts();
     const quotes = this.options.getQuotes();
@@ -133,9 +134,7 @@ export class AlertScheduler {
     }
   }
 
-  /**
-   * 将触发的规则投递到系统通知和站内通知。
-   */
+  /** 将触发的规则投递到系统通知和站内通知。 */
   private async send(rule: AlertRule, quote: StockQuote): Promise<void> {
     const label = ALERT_LABELS[rule.type];
     const suffix = rule.type.includes("CHANGE") ? "%" : "";
@@ -151,9 +150,7 @@ export class AlertScheduler {
     this.options.onLocalNotify(`${title}：${body}`);
   }
 
-  /**
-   * 根据行情签名是否连续不变，切换 5 秒活跃刷新与 60 秒低频刷新。
-   */
+  /** 根据行情签名是否连续不变，切换活跃刷新与低频刷新间隔。 */
   private updateBackoff(): void {
     const signature = buildQuotesSignature(this.options.getQuotes());
 
@@ -170,36 +167,18 @@ export class AlertScheduler {
     }
   }
 
-  /**
-   * 安排下一次刷新，页面不可见时不创建定时器。
-   */
+  /** 安排下一次刷新，不在前台时不创建定时器。 */
   private scheduleNextTick(): void {
-    if (!this.running || document.visibilityState !== "visible") return;
+    if (!this.running || !this.options.platform.isForeground()) return;
     this.timer = window.setTimeout(() => {
       void this.tick();
     }, this.currentIntervalMs);
   }
 
-  /**
-   * 清理当前等待中的刷新定时器。
-   */
+  /** 清理当前等待中的刷新定时器。 */
   private clearTimer(): void {
     if (this.timer === null) return;
     window.clearTimeout(this.timer);
     this.timer = null;
   }
-
-  /**
-   * 页面回到前台时立即刷新，切到后台时暂停定时器。
-   */
-  private handleVisibilityChange = (): void => {
-    if (!this.running) return;
-    if (document.visibilityState === "visible") {
-      this.currentIntervalMs = this.options.activeIntervalMs;
-      void this.tick();
-      return;
-    }
-
-    this.clearTimer();
-  };
 }

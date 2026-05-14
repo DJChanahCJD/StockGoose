@@ -16,6 +16,11 @@ export type Notifier = {
   notify: (payload: AlertNotificationPayload) => Promise<void>;
 };
 
+/** 运行时检测是否运行在 Tauri WebView 中。 */
+export function isTauri(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
 let audioCtx: AudioContext | null = null;
 
 function getAudioContext(): AudioContext | null {
@@ -26,7 +31,7 @@ function getAudioContext(): AudioContext | null {
   return audioCtx;
 }
 
-/** 播放简短提醒提示音 */
+/** 播放简短提醒提示音。 */
 function playAlertSound(): void {
   const ctx = getAudioContext();
   if (!ctx) return;
@@ -50,18 +55,13 @@ function playAlertSound(): void {
   }
 }
 
-/**
- * 将浏览器 Notification 权限状态归一化为应用内部状态。
- */
 function normalizePermission(
   permission: NotificationPermission
 ): NotifyPermissionState {
   return permission === "default" ? "prompt" : permission;
 }
 
-/**
- * 创建 Web Notification 通知适配器。
- */
+/** 创建浏览器 Notification API 通知适配器。 */
 function createWebNotifier(): Notifier {
   return {
     getPermissionState() {
@@ -90,12 +90,74 @@ function createWebNotifier(): Notifier {
   };
 }
 
-/**
- * 按运行平台创建提醒通知适配器。
- */
-export function createNotifier(platform: "web" | "tauri" = "web"): Notifier {
-  if (platform === "tauri") {
-    return createWebNotifier();
+/** 创建 Tauri 原生通知适配器。 */
+async function createTauriNotifier(): Promise<Notifier> {
+  const mod = await import("@tauri-apps/plugin-notification");
+
+  let cachedPermission: NotifyPermissionState = "prompt";
+
+  // 初始化时查询权限状态
+  try {
+    cachedPermission = (await mod.isPermissionGranted())
+      ? "granted"
+      : "denied";
+  } catch {
+    cachedPermission = "unsupported";
+  }
+
+  return {
+    getPermissionState() {
+      return cachedPermission;
+    },
+
+    async requestPermission() {
+      try {
+        cachedPermission = (await mod.requestPermission())
+          ? "granted"
+          : "denied";
+      } catch {
+        cachedPermission = "unsupported";
+      }
+      return cachedPermission;
+    },
+
+    async notify(payload) {
+      try {
+        if (cachedPermission !== "granted") return;
+        playAlertSound();
+        await mod.sendNotification({
+          title: payload.title,
+          body: payload.body,
+        });
+      } catch {
+        // Tauri 通知不可用时静默降级
+      }
+    },
+  };
+}
+
+/** 自动检测运行环境，创建对应通知适配器。 */
+export function createNotifier(): Notifier {
+  if (isTauri()) {
+    // Tauri 环境下异步初始化，先用空壳占位
+    const pending = createTauriNotifier();
+    let resolved: Notifier | null = null;
+    pending.then((n) => {
+      resolved = n;
+    });
+
+    return {
+      getPermissionState() {
+        return resolved?.getPermissionState() ?? "prompt";
+      },
+      async requestPermission() {
+        return (await pending).requestPermission();
+      },
+      async notify(payload) {
+        const n = resolved ?? (await pending);
+        await n.notify(payload);
+      },
+    };
   }
 
   return createWebNotifier();

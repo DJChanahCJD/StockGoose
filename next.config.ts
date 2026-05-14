@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // 使用相对路径以兼容 Tauri file:// 协议加载
+  assetPrefix: "./",
 };
 
 export default nextConfig;

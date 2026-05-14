@@ -24,6 +24,7 @@ import {
   serializeStockBackup,
 } from "@/lib/stocks/backup";
 import { createNotifier } from "@/lib/stocks/notifier";
+import { createPlatformAdapter } from "@/lib/stocks/scheduler-platform";
 import { toSecid, useStockStore } from "@/stores";
 
 /**
@@ -88,7 +89,8 @@ export default function HomePage() {
     );
   }, []);
 
-  const notifier = useMemo(() => createNotifier("web"), []);
+  const notifier = useMemo(() => createNotifier(), []);
+  const platform = useMemo(() => createPlatformAdapter(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -115,6 +117,7 @@ export default function HomePage() {
         refresh: refreshSnapshots,
         notifier,
         onLocalNotify: pushNotification,
+        platform,
       });
       scheduler.start();
     }
