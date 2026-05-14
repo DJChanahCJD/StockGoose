@@ -415,6 +415,7 @@ export const useStockStore = create<StockStoreState>()(
         alerts: state.alerts,
         lastRefreshAt: state.lastRefreshAt,
         colorMode: state.colorMode,
+        viewMode: state.viewMode,
       }),
     }
   )
