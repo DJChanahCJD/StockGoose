@@ -67,10 +67,17 @@ function createTauriAdapter(): PlatformAdapter {
   };
 }
 
+/** 在 Tauri 环境下检测是否为移动端（Android / iOS）。 */
+function isTauriMobile(): boolean {
+  return /android|iphone|ipad/i.test(navigator.userAgent);
+}
+
 /** 自动检测运行环境并创建对应的平台适配器。 */
 export function createPlatformAdapter(): PlatformAdapter {
-  if (isTauri()) {
+  if (isTauri() && !isTauriMobile()) {
     return createTauriAdapter();
   }
+  // Web 适配器在 Tauri 移动端同样适用：
+  // App 进入后台时 mobile WebView 会触发 visibilitychange
   return createWebAdapter();
 }

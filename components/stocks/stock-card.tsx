@@ -73,17 +73,17 @@ export function StockCard({
               }
             }}
             className={cn(
-              "group relative bg-card text-card-foreground rounded-2xl p-5 shadow-sm border transition-all duration-300 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring hover:scale-[1.02]",
+              "group relative bg-card text-card-foreground rounded-2xl p-4 sm:p-5 shadow-sm border transition-all duration-300 cursor-pointer focus-visible:ring-2 focus-visible:ring-ring hover:scale-[1.02] active:scale-[1.02]",
               triggered
-                ? "border-warning/40 ring-1 ring-warning/20 hover:shadow-md"
-                : "border-border hover:shadow-md hover:border-ring/40"
+                ? "border-warning/40 ring-1 ring-warning/20 hover:shadow-md active:shadow-md"
+                : "border-border hover:shadow-md hover:border-ring/40 active:shadow-md active:border-ring/40"
             )}
           >
             <div className="flex justify-between items-start mb-4">
               <div>
                 <div className="flex items-center gap-2 min-w-0">
                   <h2
-                    className="text-base font-bold tracking-tight truncate max-w-[140px]"
+                    className="text-base font-bold tracking-tight truncate max-w-[120px] sm:max-w-[140px]"
                     title={quote.name}
                   >
                     {quote.name}
@@ -174,7 +174,7 @@ export function StockCard({
                 "absolute top-4 left-1/2 -translate-x-1/2 rounded-md p-1 transition-opacity focus-visible:ring-2 focus-visible:ring-ring",
                 dragDisabled
                   ? "cursor-not-allowed opacity-20"
-                  : "cursor-grab opacity-40 hover:opacity-100 active:cursor-grabbing"
+                  : "cursor-grab opacity-40 hover:opacity-100 active:opacity-100 active:cursor-grabbing"
               )}
               title={dragDisabled ? "过滤时不可排序" : "拖拽排序"}
               aria-label={dragDisabled ? "过滤时不可排序" : "拖拽排序"}

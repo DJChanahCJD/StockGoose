@@ -167,7 +167,7 @@ export function StockHeader({
           <Button
             variant="ghost"
             size="icon-sm"
-            className="text-muted-foreground hover:text-foreground"
+            className="min-h-[44px] min-w-[44px] text-muted-foreground hover:text-foreground"
             aria-label="打开外观设置"
           >
             <Settings2 className="w-4 h-4" />
@@ -270,7 +270,7 @@ export function StockHeader({
       className="min-h-14 bg-card border-b border-border select-none shrink-0 z-10"
       data-tauri-drag-region
     >
-      <div className="max-w-7xl mx-auto w-full min-h-14 px-6 flex items-center justify-between gap-3 pointer-events-none">
+      <div className="max-w-7xl mx-auto w-full min-h-14 px-3 sm:px-4 md:px-6 flex items-center justify-between gap-3 pointer-events-none">
         <div
           className="flex items-center gap-3 text-foreground pointer-events-auto cursor-pointer"
           onClick={() => window.location.reload()}
@@ -286,7 +286,7 @@ export function StockHeader({
               variant="ghost"
               size="icon-sm"
               onClick={() => setMobileSearchOpen((open) => !open)}
-              className="text-muted-foreground hover:text-foreground"
+              className="min-h-[44px] min-w-[44px] text-muted-foreground hover:text-foreground"
               aria-label="搜索自选"
             >
               <Search className="w-4 h-4" />
@@ -318,7 +318,7 @@ export function StockHeader({
       {renderImportInput("stock-data-import")}
       {renderImportInput("stock-data-import-mobile")}
       {isMobile && mobileSearchOpen && (
-        <div className="px-6 pb-3 pointer-events-auto">
+        <div className="px-3 sm:px-4 md:px-6 pb-3 pointer-events-auto">
           {renderSearchInput("w-full")}
         </div>
       )}

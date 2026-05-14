@@ -73,7 +73,7 @@ export function StockListItem({
               }
             }}
             className={cn(
-              "group grid min-h-16 grid-cols-[22px_minmax(0,1fr)_48px_64px_80px] items-center gap-2 rounded-xl border bg-card px-3 py-2 text-card-foreground shadow-sm transition-all hover:border-ring/40 hover:shadow-md focus-visible:ring-2 focus-visible:ring-ring",
+              "group grid min-h-16 grid-cols-[22px_minmax(0,1fr)_48px_64px_80px] items-center gap-2 rounded-xl border bg-card px-3 py-2 text-card-foreground shadow-sm transition-all hover:border-ring/40 hover:shadow-md active:border-ring/40 active:shadow-md focus-visible:ring-2 focus-visible:ring-ring",
               triggered ? "border-warning/40 bg-warning/3" : "border-border"
             )}
           >
@@ -85,7 +85,7 @@ export function StockListItem({
                 "flex h-8 w-7 items-center justify-center rounded-md transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 dragDisabled
                   ? "cursor-not-allowed text-muted-foreground/30"
-                  : "cursor-grab text-muted-foreground hover:bg-secondary hover:text-foreground active:cursor-grabbing"
+                  : "cursor-grab text-muted-foreground hover:bg-secondary hover:text-foreground active:bg-secondary active:text-foreground active:cursor-grabbing"
               )}
               title={dragDisabled ? "过滤时不可排序" : "拖拽排序"}
               aria-label={dragDisabled ? "过滤时不可排序" : "拖拽排序"}
