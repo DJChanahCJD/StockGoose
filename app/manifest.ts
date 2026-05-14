@@ -13,8 +13,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "A cross-platform stock watchlist and market monitor.",
     start_url: "/",
     display: "standalone",
-    background_color: "#FAFAFA",
-    theme_color: "#FAFAFA",
+    background_color: "#FFFFFF",
+    theme_color: "#FFFFFF",
     icons: [
       {
         src: "logo.svg",
