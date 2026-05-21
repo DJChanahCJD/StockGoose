@@ -276,7 +276,7 @@ export function StockHeader({
           onClick={() => window.location.reload()}
           title="点击刷新"
         >
-          <GooseLogo className="w-5 h-5" />
+          <GooseLogo className="w-6 h-6" />
           <h1 className="font-bold tracking-tight text-md">StockGoose</h1>
         </div>
 
