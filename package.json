@@ -10,6 +10,7 @@
     "test:links:live": "node --no-warnings --test lib/stocks/external-links.live.test.mjs",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
+    "version": "node scripts/sync-versions.mjs && git add src-tauri/tauri.conf.json src-tauri/Cargo.toml",
     "prepare": "husky",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
