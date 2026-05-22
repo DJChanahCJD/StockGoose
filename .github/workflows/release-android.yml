@@ -50,9 +50,6 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > src-tauri/release.keystore
 
-      - name: Init Android project
-        run: npx tauri android init
-
       - name: Create keystore.properties
         run: |
           cat > src-tauri/gen/android/app/keystore.properties << 'EOF'
