@@ -1,6 +1,6 @@
 [package]
 name = "stockgoose"
-version = "0.1.0"
+version = "0.1.1"
 description = "极简自选股实时监控面板"
 authors = ["djchan"]
 license = "MIT"
