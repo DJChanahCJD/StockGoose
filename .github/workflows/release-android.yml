@@ -50,6 +50,12 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > src-tauri/release.keystore
 
+      - name: Init Android project
+        run: npx tauri android init
+
+      - name: Patch Maven mirrors
+        run: sed -i '/maven\.aliyun\.com/d' src-tauri/gen/android/build.gradle.kts
+
       - name: Create keystore.properties
         run: |
           cat > src-tauri/gen/android/app/keystore.properties << 'EOF'
