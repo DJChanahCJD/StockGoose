@@ -54,7 +54,7 @@ jobs:
         run: npx tauri android init
 
       - name: Patch Maven mirrors
-        run: sed -i '/maven\.aliyun\.com/d' src-tauri/gen/android/build.gradle.kts
+        run: find src-tauri/gen/android -name "*.gradle.kts" -exec sed -i '/maven\.aliyun\.com/d' {} \;
 
       - name: Create keystore.properties
         run: |
